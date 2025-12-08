@@ -1,0 +1,5 @@
+{
+  "name": "The Lung Listener",
+  "description": "A research-grade dashboard for respiratory audio analysis and AI diagnosis using Gemini 3 Pro.",
+  "requestFramePermissions": []
+}
