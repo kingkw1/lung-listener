@@ -1,7 +1,41 @@
 import React, { useState } from 'react';
-import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit } from 'lucide-react';
+import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2 } from 'lucide-react';
 import { AudioFile, AnalysisStatus } from '../types';
 import { motion } from 'framer-motion';
+import { GoogleGenAI } from "@google/genai";
+
+// --- AI INFRASTRUCTURE SETUP ---
+
+// Initialize the Google GenAI Client
+// We accept NEXT_PUBLIC_GEMINI_API_KEY as requested, falling back to API_KEY if available.
+const ai = new GoogleGenAI({ 
+  apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.API_KEY || '' 
+});
+
+/**
+ * Helper: Convert a File or Blob object to a Google GenAI compatible inlineData part.
+ * @param file The audio file or blob to convert.
+ * @returns Promise resolving to the inlineData object.
+ */
+const fileToGenerativePart = async (file: File | Blob): Promise<{ inlineData: { data: string; mimeType: string } }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // Extract the Base64 string (remove the "data:audio/wav;base64," prefix)
+      const base64Data = result.split(',')[1];
+      
+      resolve({
+        inlineData: {
+          data: base64Data,
+          mimeType: file.type || 'audio/wav',
+        },
+      });
+    };
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(file);
+  });
+};
 
 interface RightPanelProps {
   currentFile: AudioFile | null;
@@ -12,45 +46,16 @@ interface RightPanelProps {
 export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisStatus, setAnalysisStatus }) => {
   const [messages, setMessages] = useState<Array<{role: string, content: React.ReactNode}>>([]);
 
-  const runAnalysis = () => {
+  // Phase 2: Simplified Handler
+  const handleDeepAnalysis = () => {
     if (!currentFile) return;
     
     setAnalysisStatus(AnalysisStatus.ANALYZING);
-    setMessages([]); // Clear previous
-
-    // Simulation of AI process steps
+    
+    // Simulating "Listening..." state
     setTimeout(() => {
-        addMessage('system', 'Preprocessing audio signal (Noise Reduction)...');
-    }, 500);
-
-    setTimeout(() => {
-        addMessage('system', 'Generating mel-spectrogram features...');
-    }, 1500);
-
-    setTimeout(() => {
-        addMessage('system', 'Sending data to Gemini 3 Pro (Multimodal)...');
-    }, 3000);
-
-    setTimeout(() => {
-        setAnalysisStatus(AnalysisStatus.COMPLETED);
-        addMessage('assistant', (
-            <div className="space-y-3">
-                <div className="p-3 bg-red-900/20 border border-red-900/50 rounded-lg flex items-start space-x-3">
-                    <AlertTriangle className="text-red-400 flex-shrink-0 mt-0.5" size={18} />
-                    <div>
-                        <h4 className="text-sm font-bold text-red-200">Abnormality Detected</h4>
-                        <p className="text-xs text-red-300 mt-1">Confidence: 94.2%</p>
-                    </div>
-                </div>
-                <p className="text-sm text-slate-300 leading-relaxed">
-                    The audio exhibits distinctive <span className="text-cyan-300 font-semibold">high-pitched wheezing</span> during the expiratory phase, consistent with mild bronchial obstruction.
-                </p>
-                <div className="text-xs text-slate-500 pt-2 border-t border-slate-700 mt-2">
-                    <span className="font-semibold text-slate-400">Recommendation:</span> Consider spirometry to rule out early-stage asthma.
-                </div>
-            </div>
-        ));
-    }, 5000);
+        setAnalysisStatus(AnalysisStatus.IDLE);
+    }, 2000);
   };
 
   const addMessage = (role: string, content: React.ReactNode) => {
@@ -103,18 +108,12 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
                 )}
             </motion.div>
         ))}
-
-        {analysisStatus === AnalysisStatus.ANALYZING && (
-            <div className="flex items-center justify-center py-4">
-                <Activity className="animate-spin text-cyan-500" size={24} />
-            </div>
-        )}
       </div>
 
       {/* Footer / Action Area */}
       <div className="p-5 border-t border-slate-800 bg-slate-900">
          <button
-            onClick={runAnalysis}
+            onClick={handleDeepAnalysis}
             disabled={!currentFile || analysisStatus === AnalysisStatus.ANALYZING}
             className={`w-full py-3 px-4 rounded-lg flex items-center justify-center space-x-2 font-medium transition-all duration-200
                 ${!currentFile 
@@ -127,7 +126,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
          >
             {analysisStatus === AnalysisStatus.ANALYZING ? (
                 <>
-                    <span className="text-sm">Processing Signal...</span>
+                    <Loader2 className="animate-spin" size={16} />
+                    <span className="text-sm">Listening...</span>
                 </>
             ) : (
                 <>
