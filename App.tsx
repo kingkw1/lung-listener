@@ -12,6 +12,9 @@ const App: React.FC = () => {
   
   const [currentFile, setCurrentFile] = useState<AudioFile | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
+  
+  // Shared state for AI text stream
+  const [aiAnalysisOutput, setAiAnalysisOutput] = useState<string>("");
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
@@ -30,6 +33,7 @@ const App: React.FC = () => {
         <CenterStage 
           currentFile={currentFile} 
           setCurrentFile={setCurrentFile}
+          aiAnalysisOutput={aiAnalysisOutput}
         />
       </main>
 
@@ -39,6 +43,7 @@ const App: React.FC = () => {
           currentFile={currentFile}
           analysisStatus={analysisStatus}
           setAnalysisStatus={setAnalysisStatus}
+          setAiAnalysisOutput={setAiAnalysisOutput}
         />
       </aside>
     </div>

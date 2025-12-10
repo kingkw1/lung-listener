@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2 } from 'lucide-react';
 import { AudioFile, AnalysisStatus } from '../types';
@@ -41,9 +40,10 @@ interface RightPanelProps {
   currentFile: AudioFile | null;
   analysisStatus: AnalysisStatus;
   setAnalysisStatus: React.Dispatch<React.SetStateAction<AnalysisStatus>>;
+  setAiAnalysisOutput: React.Dispatch<React.SetStateAction<string>>;
 }
 
-export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisStatus, setAnalysisStatus }) => {
+export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisStatus, setAnalysisStatus, setAiAnalysisOutput }) => {
   const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
 
   // Phase 3: Real Gemini API Integration
@@ -52,6 +52,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
     
     setAnalysisStatus(AnalysisStatus.ANALYZING);
     setMessages([]); // Clear previous analysis
+    setAiAnalysisOutput(""); // Reset shared state
 
     try {
         // 1. Retrieve the Blob from the local ObjectURL
@@ -97,6 +98,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
             if (chunkText) {
                 fullResponse += chunkText;
                 setMessages([{ role: 'assistant', content: fullResponse }]);
+                setAiAnalysisOutput(fullResponse); // Update shared state for visualization
             }
         }
 

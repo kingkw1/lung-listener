@@ -14,6 +14,7 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 interface CenterStageProps {
   currentFile: AudioFile | null;
   setCurrentFile: React.Dispatch<React.SetStateAction<AudioFile | null>>;
+  aiAnalysisOutput: string;
 }
 
 // --- SCIENTIFIC HELPER FUNCTIONS ---
@@ -55,7 +56,7 @@ const getPlasmaColormap = () => {
     return colors;
 };
 
-export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurrentFile }) => {
+export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurrentFile, aiAnalysisOutput }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -271,11 +272,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
   useEffect(() => {
     // Toggle visibility of regions
     if (regionsPluginRef.current) {
-        // We can't easily "hide" regions with the API, so we iterate the DOM elements via the plugin
-        // Or simpler: get all regions and modify their CSS via the plugin API if available, 
-        // or just toggle the container class. 
-        // Best robust way in V7: Iterate regions and use custom styling or just recreate them.
-        // For performance, we will toggle the opacity of the region elements.
         const regions = regionsPluginRef.current.getRegions();
         regions.forEach((r: any) => {
              if (r.element) {
@@ -284,6 +280,54 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
         });
     }
   }, [showLabels, hasLabels]);
+
+  // --- AI REGION PARSING ---
+  
+  useEffect(() => {
+    if (!aiAnalysisOutput || !regionsPluginRef.current || !showLabels) return;
+
+    // Regex to find timestamps: e.g. "0:02 - 0:05" or "1:15 - 1:20"
+    const regex = /(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/g;
+    
+    let match;
+    const existingRegions = regionsPluginRef.current.getRegions();
+
+    while ((match = regex.exec(aiAnalysisOutput)) !== null) {
+        const startMin = parseInt(match[1]);
+        const startSec = parseInt(match[2]);
+        const endMin = parseInt(match[3]);
+        const endSec = parseInt(match[4]);
+
+        const start = startMin * 60 + startSec;
+        const end = endMin * 60 + endSec;
+
+        // Check if this AI region already exists to avoid duplicates
+        // We look for a region with roughly same start/end and content "AI Diagnosis"
+        const alreadyExists = existingRegions.some((r: any) => {
+            return (
+                r.content?.innerText === 'AI Diagnosis' &&
+                Math.abs(r.start - start) < 0.1 && 
+                Math.abs(r.end - end) < 0.1
+            );
+        });
+
+        if (!alreadyExists) {
+            addLog(`AI Detection found: ${match[0]} (${start}s - ${end}s)`);
+            regionsPluginRef.current.addRegion({
+                start,
+                end,
+                content: 'AI Diagnosis',
+                color: 'rgba(168, 85, 247, 0.4)', // Purple
+                drag: false,
+                resize: false,
+            });
+            // Ensure labels are on
+            if (!hasLabels) setHasLabels(true);
+        }
+    }
+
+  }, [aiAnalysisOutput, hasLabels, showLabels]);
+
 
   const handleLabelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -297,7 +341,14 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
           if (!text || !regionsPluginRef.current) return;
 
           addLog("Parsing ICBHI clinical data...");
-          regionsPluginRef.current.clearRegions(); // Clear existing
+          // We intentionally do NOT clear existing AI regions here, only clinical ones if needed, 
+          // but for now, let's clear everything to avoid mess, or filter.
+          // Requirement says "Clear existing regions (if any) to prevent duplicates".
+          // But we also want to keep AI regions. 
+          // Let's remove only clinical regions (Wheeze/Crackle) before import?
+          // For simplicity complying to previous prompt, we clear all or none. 
+          // Let's clear all to be safe as per "Clear existing regions" instruction.
+          regionsPluginRef.current.clearRegions(); 
 
           const lines = text.split('\n');
           let count = 0;
@@ -566,6 +617,10 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
                         <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded">
                             <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
                             <span className="text-[10px] text-slate-300">CRACKLE</span>
+                        </div>
+                        <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                            <span className="text-[10px] text-slate-300">AI DIAGNOSIS</span>
                         </div>
                     </div>
                   )}
