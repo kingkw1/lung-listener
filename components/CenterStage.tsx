@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, DragEvent } from 'react';
-import { UploadCloud, FileAudio, X } from 'lucide-react';
+import { UploadCloud, FileAudio, X, FileText, Tag, Eye, EyeOff } from 'lucide-react';
 import { AudioFile } from '../types';
 import { AudioPlayer } from './AudioPlayer';
 import { DebugLog } from './DebugLog';
@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import WaveSurfer from 'wavesurfer.js';
 import Spectrogram from 'wavesurfer.js/dist/plugins/spectrogram.esm.js';
 import Timeline from 'wavesurfer.js/dist/plugins/timeline.esm.js';
+import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 
 interface CenterStageProps {
   currentFile: AudioFile | null;
@@ -18,7 +19,6 @@ interface CenterStageProps {
 // --- SCIENTIFIC HELPER FUNCTIONS ---
 
 // Generate a Plasma-like colormap (Blue -> Purple -> Red -> Yellow)
-// Returns array of [r, g, b, a] (0-1 range for WaveSurfer Spectrogram)
 const getPlasmaColormap = () => {
     const colors = [];
     for (let i = 0; i < 256; i++) {
@@ -58,10 +58,12 @@ const getPlasmaColormap = () => {
 export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurrentFile }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const labelInputRef = useRef<HTMLInputElement>(null);
 
   // Single container ref for both Waveform and Spectrogram
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const regionsPluginRef = useRef<any>(null); // Keep reference to regions plugin
 
   // Audio State for the Player
   const [isPlaying, setIsPlaying] = useState(false);
@@ -70,6 +72,10 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isReady, setIsReady] = useState(false);
+
+  // Clinical Data State
+  const [hasLabels, setHasLabels] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
 
   // Logging State
   const [logs, setLogs] = useState<string[]>([]);
@@ -88,6 +94,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    setHasLabels(false);
     
     addLog(`File loaded: ${currentFile.name} (${currentFile.type})`);
 
@@ -129,9 +136,11 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
 
         addLog("Initializing WaveSurfer Engine...");
 
+        // Create Regions Plugin Instance
+        const wsRegions = RegionsPlugin.create();
+        regionsPluginRef.current = wsRegions;
+
         // 4. Create Instance
-        // We use a single container. WaveSurfer renders the waveform here.
-        // Spectrogram will be appended inside this container by the plugin.
         ws = WaveSurfer.create({
           container: containerRef.current,
           waveColor: '#06b6d4',      // Medical Cyan
@@ -154,7 +163,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
               frequencyMin: 0,
               frequencyMax: 4000,    // Optimized for lung sounds
               fftSamples: 1024,
-              colorMap: getPlasmaColormap(), // Custom Scientific Color
+              colorMap: getPlasmaColormap(), 
             }),
             Timeline.create({
               height: 20,
@@ -164,7 +173,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
                   fontSize: '10px',
                   color: '#64748b',
               }
-            })
+            }),
+            wsRegions
           ],
         });
 
@@ -178,33 +188,53 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
           setDuration(ws!.getDuration());
           ws!.setVolume(isMuted ? 0 : volume);
 
-          // --- CSS HACK FOR FULL HEIGHT CURSOR ---
-          // By default, the cursor sits inside the Waveform wrapper which has overflow:hidden.
-          // We need to allow overflow and force the cursor height to cover the spectrogram.
+          // --- CSS HACK FOR FULL HEIGHT CURSOR & REGIONS ---
           const wrapper = ws!.getWrapper();
           if (wrapper) {
              wrapper.style.overflow = 'visible';
-             wrapper.style.zIndex = '10'; // Ensure cursor sits on top of spectrogram
+             wrapper.style.zIndex = '10'; 
              
-             // Find the cursor element. WaveSurfer doesn't expose it directly easily, 
-             // but it's usually part of the shadow DOM or a child div.
-             // We inject a style into the container to target it.
-             const styleId = 'wavesurfer-cursor-override';
+             const styleId = 'wavesurfer-overrides';
              if (!document.getElementById(styleId)) {
                  const style = document.createElement('style');
                  style.id = styleId;
-                 // Target the wrapper's shadow root cursor OR the element if no shadow root
-                 // WaveSurfer v7 puts cursor in the wrapper.
                  style.innerHTML = `
+                    /* Force cursor to span full height */
                     #viz-container ::part(cursor) {
                         height: 300px !important;
                         top: 0 !important;
                         background-color: rgba(255, 255, 255, 0.8) !important;
                     }
-                    /* Fallback if no shadow dom parts used in this version */
                     #viz-container .wavesurfer-cursor {
                         height: 300px !important; 
                         top: 0 !important;
+                    }
+
+                    /* Force regions to span full height and look nice */
+                    #viz-container ::part(region) {
+                        height: 300px !important;
+                        top: 0 !important;
+                        z-index: 4 !important; /* Above spectro, below cursor */
+                        border-left: 1px solid rgba(255,255,255,0.4);
+                        border-right: 1px solid rgba(255,255,255,0.4);
+                    }
+                    #viz-container .wavesurfer-region {
+                        height: 300px !important;
+                        top: 0 !important;
+                        z-index: 4 !important;
+                        border-left: 1px solid rgba(255,255,255,0.4);
+                        border-right: 1px solid rgba(255,255,255,0.4);
+                    }
+                    
+                    /* Region Labels */
+                    #viz-container ::part(region-content) {
+                        color: white;
+                        font-family: monospace;
+                        font-size: 10px;
+                        padding: 4px;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                        background: rgba(0,0,0,0.5);
                     }
                  `;
                  document.head.appendChild(style);
@@ -232,10 +262,96 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
         ws.destroy();
       }
       wavesurferRef.current = null;
+      regionsPluginRef.current = null;
     };
   }, [currentFile]); 
 
-  // Control Handlers
+  // --- REGION / LABELS HANDLING ---
+
+  useEffect(() => {
+    // Toggle visibility of regions
+    if (regionsPluginRef.current) {
+        // We can't easily "hide" regions with the API, so we iterate the DOM elements via the plugin
+        // Or simpler: get all regions and modify their CSS via the plugin API if available, 
+        // or just toggle the container class. 
+        // Best robust way in V7: Iterate regions and use custom styling or just recreate them.
+        // For performance, we will toggle the opacity of the region elements.
+        const regions = regionsPluginRef.current.getRegions();
+        regions.forEach((r: any) => {
+             if (r.element) {
+                 r.element.style.display = showLabels ? 'block' : 'none';
+             }
+        });
+    }
+  }, [showLabels, hasLabels]);
+
+  const handleLabelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      addLog(`Reading labels file: ${file.name}`);
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+          const text = event.target?.result as string;
+          if (!text || !regionsPluginRef.current) return;
+
+          addLog("Parsing ICBHI clinical data...");
+          regionsPluginRef.current.clearRegions(); // Clear existing
+
+          const lines = text.split('\n');
+          let count = 0;
+
+          lines.forEach(line => {
+              if (!line.trim()) return;
+              // Format: Start \t End \t Crackles \t Wheezes
+              const parts = line.split('\t').map(s => s.trim());
+              if (parts.length < 4) return;
+
+              const start = parseFloat(parts[0]);
+              const end = parseFloat(parts[1]);
+              const crackles = parseInt(parts[2]);
+              const wheezes = parseInt(parts[3]);
+
+              if (isNaN(start) || isNaN(end)) return;
+
+              if (wheezes === 1) {
+                  regionsPluginRef.current.addRegion({
+                      start,
+                      end,
+                      content: 'Wheeze',
+                      color: 'rgba(239, 68, 68, 0.3)', // Red
+                      drag: false,
+                      resize: false,
+                  });
+                  count++;
+              }
+              if (crackles === 1) {
+                  regionsPluginRef.current.addRegion({
+                      start,
+                      end,
+                      content: 'Crackle',
+                      color: 'rgba(234, 179, 8, 0.3)', // Yellow
+                      drag: false,
+                      resize: false,
+                  });
+                  count++;
+              }
+          });
+
+          addLog(`Imported ${count} clinical regions.`);
+          setHasLabels(true);
+          setShowLabels(true);
+      };
+
+      reader.readAsText(file);
+      // Reset input
+      e.target.value = '';
+  };
+
+
+  // --- AUDIO CONTROLS ---
+
   const handleTogglePlay = () => {
     if (wavesurferRef.current && isReady) {
       if (isPlaying) {
@@ -269,7 +385,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
     }
   };
 
-  // Drag & Drop
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
@@ -296,6 +411,12 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
 
   const processFiles = (files: FileList) => {
     const file = files[0];
+    // Basic check for audio
+    if (!file.type.startsWith('audio/') && !file.name.endsWith('.wav')) {
+        addLog(`Error: Invalid file type ${file.type}`);
+        return;
+    }
+    
     addLog(`Processing file: ${file.name}`);
     const url = URL.createObjectURL(file);
     setCurrentFile({
@@ -315,6 +436,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
     setCurrentFile(null);
     setIsReady(false);
     setLogs([]); 
+    setHasLabels(false);
   };
 
   return (
@@ -322,7 +444,45 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
       
       {/* Header */}
       <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950/80 backdrop-blur z-20">
-        <h2 className="text-slate-200 font-medium">Signal Lab</h2>
+        <div className="flex items-center space-x-6">
+            <h2 className="text-slate-200 font-medium">Signal Lab</h2>
+            
+            {/* Clinical Labels Control Group */}
+            {currentFile && isReady && (
+                <div className="flex items-center space-x-3 pl-6 border-l border-slate-800">
+                    <input 
+                        type="file" 
+                        ref={labelInputRef} 
+                        className="hidden" 
+                        accept=".txt"
+                        onChange={handleLabelImport}
+                    />
+                    <button 
+                        onClick={() => labelInputRef.current?.click()}
+                        className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors border border-slate-700"
+                        title="Import ICBHI .txt file"
+                    >
+                        <FileText size={14} />
+                        <span>Import Labels</span>
+                    </button>
+
+                    {hasLabels && (
+                        <button 
+                            onClick={() => setShowLabels(!showLabels)}
+                            className={`flex items-center space-x-2 px-3 py-1.5 text-xs rounded transition-colors border ${
+                                showLabels 
+                                ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' 
+                                : 'bg-slate-900 border-slate-800 text-slate-500'
+                            }`}
+                        >
+                            {showLabels ? <Eye size={14} /> : <EyeOff size={14} />}
+                            <span>{showLabels ? 'Labels Visible' : 'Labels Hidden'}</span>
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+
         <div className="flex items-center space-x-2">
           <span className={`w-2 h-2 rounded-full transition-colors duration-300 ${isReady ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'bg-slate-700'}`}></span>
           <span className="text-xs text-slate-500 uppercase tracking-wider">{currentFile ? (isReady ? 'Analysis Ready' : 'Loading Signal...') : 'Awaiting Signal'}</span>
@@ -395,8 +555,22 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
                   <div className="absolute top-[110px] left-2 z-20 pointer-events-none">
                      <span className="bg-slate-950/80 border border-slate-800 text-amber-500 text-[10px] px-2 py-0.5 rounded font-mono">SPECTROGRAM (0-4kHz)</span>
                   </div>
+                  
+                  {/* Legend Overlay */}
+                  {hasLabels && showLabels && (
+                    <div className="absolute top-2 right-2 z-20 pointer-events-none flex flex-col items-end space-y-1">
+                        <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded">
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span className="text-[10px] text-slate-300">WHEEZE</span>
+                        </div>
+                        <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded">
+                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                            <span className="text-[10px] text-slate-300">CRACKLE</span>
+                        </div>
+                    </div>
+                  )}
 
-                  {/* The Main Container: WaveSurfer renders waveform here, and appends Spectrogram below it */}
+                  {/* The Main Container */}
                   <div id="viz-container" ref={containerRef} className="w-full h-full relative" />
               </div>
             </motion.div>
