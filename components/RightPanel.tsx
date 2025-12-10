@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2 } from 'lucide-react';
 import { AudioFile, AnalysisStatus } from '../types';
@@ -7,7 +8,6 @@ import { GoogleGenAI } from "@google/genai";
 // --- AI INFRASTRUCTURE SETUP ---
 
 // Initialize the Google GenAI Client
-// We accept NEXT_PUBLIC_GEMINI_API_KEY as requested, falling back to API_KEY if available.
 const ai = new GoogleGenAI({ 
   apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.API_KEY || '' 
 });
@@ -44,22 +44,69 @@ interface RightPanelProps {
 }
 
 export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisStatus, setAnalysisStatus }) => {
-  const [messages, setMessages] = useState<Array<{role: string, content: React.ReactNode}>>([]);
+  const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
 
-  // Phase 2: Simplified Handler
-  const handleDeepAnalysis = () => {
+  // Phase 3: Real Gemini API Integration
+  const handleDeepAnalysis = async () => {
     if (!currentFile) return;
     
     setAnalysisStatus(AnalysisStatus.ANALYZING);
-    
-    // Simulating "Listening..." state
-    setTimeout(() => {
-        setAnalysisStatus(AnalysisStatus.IDLE);
-    }, 2000);
-  };
+    setMessages([]); // Clear previous analysis
 
-  const addMessage = (role: string, content: React.ReactNode) => {
-    setMessages(prev => [...prev, { role, content }]);
+    try {
+        // 1. Retrieve the Blob from the local ObjectURL
+        const response = await fetch(currentFile.url);
+        const blob = await response.blob();
+
+        // 2. Convert to GenAI Format
+        const audioPart = await fileToGenerativePart(blob);
+
+        // 3. Construct System Prompt & User Prompt
+        const systemInstruction = "You are an expert Pulmonologist and Respiratory Research Scientist. Your task is to analyze raw respiratory audio files. Listen for specific acoustic anomalies like 'Crackles' (discontinuous, explosive sounds) and 'Wheezes' (continuous, musical sounds).";
+        
+        const userPrompt = "Analyze this audio recording. 1. Describe the overall quality. 2. Identify any anomalies and their approximate timestamps. 3. Suggest a potential diagnosis based *only* on the sound. Format your response clearly.";
+
+        // 4. Initialize Stream
+        // Note: Using the new SDK structure `ai.models.generateContentStream`
+        const result = await ai.models.generateContentStream({
+            model: 'gemini-2.0-flash-exp',
+            config: {
+                systemInstruction: systemInstruction,
+            },
+            contents: [
+                {
+                    parts: [
+                        audioPart,
+                        { text: userPrompt }
+                    ]
+                }
+            ]
+        });
+
+        // 5. Process Stream
+        let fullResponse = "";
+        
+        // Initialize the message in UI
+        setMessages([{ role: 'assistant', content: '' }]);
+
+        for await (const chunk of result) {
+            const chunkText = chunk.text;
+            if (chunkText) {
+                fullResponse += chunkText;
+                setMessages([{ role: 'assistant', content: fullResponse }]);
+            }
+        }
+
+        setAnalysisStatus(AnalysisStatus.COMPLETED);
+
+    } catch (error: any) {
+        console.error("Gemini Analysis Failed:", error);
+        setMessages(prev => [
+            ...prev, 
+            { role: 'system', content: `Analysis Error: ${error.message || 'Unknown error occurred.'}` }
+        ]);
+        setAnalysisStatus(AnalysisStatus.ERROR);
+    }
   };
 
   return (
@@ -95,19 +142,29 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
                 className={`flex flex-col ${msg.role === 'assistant' ? 'items-start' : 'items-start'}`}
             >
                 {msg.role === 'system' && (
-                    <div className="flex items-center space-x-2 text-xs text-slate-500 py-1 font-mono">
-                         <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse"></div>
+                    <div className="flex items-center space-x-2 text-xs text-red-400 py-2 font-mono bg-red-900/20 px-3 rounded w-full">
+                         <AlertTriangle size={12} />
                          <span>{msg.content}</span>
                     </div>
                 )}
                 
                 {msg.role === 'assistant' && (
                     <div className="bg-slate-800/80 border border-slate-700 rounded-lg p-4 w-full shadow-sm">
-                        {msg.content}
+                        <div className="prose prose-invert prose-sm max-w-none text-slate-300 whitespace-pre-wrap leading-relaxed">
+                            {msg.content}
+                        </div>
                     </div>
                 )}
             </motion.div>
         ))}
+        
+        {/* Loading Indicator inside chat */}
+        {analysisStatus === AnalysisStatus.ANALYZING && messages.length === 0 && (
+             <div className="flex items-center space-x-2 text-xs text-cyan-500 animate-pulse">
+                <Loader2 size={12} className="animate-spin" />
+                <span>Establishing connection to Gemini 2.0 Flash...</span>
+             </div>
+        )}
       </div>
 
       {/* Footer / Action Area */}
