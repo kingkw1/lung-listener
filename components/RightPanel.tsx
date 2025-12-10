@@ -62,9 +62,12 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
         const audioPart = await fileToGenerativePart(blob);
 
         // 3. Construct System Prompt & User Prompt
-        const systemInstruction = "You are an expert Pulmonologist and Respiratory Research Scientist. Your task is to analyze raw respiratory audio files. Listen for specific acoustic anomalies like 'Crackles' (discontinuous, explosive sounds) and 'Wheezes' (continuous, musical sounds).";
+        const systemInstruction = `You are an expert Pulmonologist. Analyze this audio waveform.
+1. Quality Check: Briefly assess signal-to-noise ratio.
+2. Timeline Analysis: You MUST provide specific timestamps (e.g., '0:02 - 0:05') for the most distinct anomalies. If a sound is continuous, mark the start and end of the most intense segment.
+3. Diagnosis: Brief, bulleted potential causes.`;
         
-        const userPrompt = "Analyze this audio recording. 1. Describe the overall quality. 2. Identify any anomalies and their approximate timestamps. 3. Suggest a potential diagnosis based *only* on the sound. Format your response clearly.";
+        const userPrompt = "Analyze this audio. Locate the exact start/end time of the clearest Wheeze or Crackle.";
 
         // 4. Initialize Stream
         // Note: Using the new SDK structure `ai.models.generateContentStream`
