@@ -51,7 +51,10 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
 
   const wheezeRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('wheeze'));
   const crackleRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('crackle'));
-  const showDropZone = clinicalRegions.length === 0;
+  
+  // Show Drop Zone overlay ONLY if no human labels AND no AI labels are present.
+  // This allows AI labels to "unlock" the view even if human labels aren't uploaded yet.
+  const showDropZone = clinicalRegions.length === 0 && aiRegions.length === 0;
 
   // Calculate Scroll Position (Centered Playhead)
   // We want the currentTime to be roughly in the center of the container
@@ -158,13 +161,17 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
             </div>
 
             {/* Clear Button Overlay */}
-            <div className="absolute top-2 right-2 z-50 pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={onClear}
-                  className="px-2 py-1 text-[10px] bg-slate-800 text-red-400 border border-slate-700 rounded hover:bg-slate-700 shadow-lg"
-                >
-                  Clear Labels
-                </button>
+            <div className="absolute top-2 right-2 z-50 pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-end space-y-2">
+                
+                {/* Always provide access to label uploader even if AI lane is driving the view */}
+                <div className="w-64 scale-90 origin-top-right">
+                    <LabelControlZone 
+                        onRegionsLoaded={onRegionsLoaded}
+                        onClear={onClear}
+                        hasLabels={clinicalRegions.length > 0}
+                        currentLabelFile={currentLabelFile}
+                    />
+                </div>
             </div>
 
             {/* File Source Indicator */}

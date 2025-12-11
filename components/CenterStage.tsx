@@ -176,29 +176,57 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   }, [aiFilterConfig]);
 
   // --- AI REGION PARSING ---
+  // Updated to fully re-parse string to prevent stale state issues
   useEffect(() => {
-    if (!aiAnalysisOutput) return;
-    const regex = /(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/g;
+    if (!aiAnalysisOutput) {
+        if (aiRegions.length > 0) setAiRegions([]);
+        return;
+    }
+    
+    // Improved Regex:
+    // Captures timestamps format like "0:28 - 0:34", "1:05 to 1:10", "0:00 – 0:05"
+    // Handles various dash types and whitespace flexibility
+    const regex = /(\d{1,2}):(\d{2})\s*(?:[-–—]|to)\s*(\d{1,2}):(\d{2})/gi;
+    
     let match;
-    const newRegions: RegionData[] = [];
+    const parsedRegions: RegionData[] = [];
 
     while ((match = regex.exec(aiAnalysisOutput)) !== null) {
-        const start = parseInt(match[1]) * 60 + parseInt(match[2]);
-        const end = parseInt(match[3]) * 60 + parseInt(match[4]);
+        const startMin = parseInt(match[1], 10);
+        const startSec = parseInt(match[2], 10);
+        const endMin = parseInt(match[3], 10);
+        const endSec = parseInt(match[4], 10);
+
+        const start = startMin * 60 + startSec;
+        const end = endMin * 60 + endSec;
+
+        // Skip invalid ranges
+        if (end <= start) continue;
+
         const id = `ai-region-${start}-${end}`;
         
-        if (!newRegions.find(r => r.id === id) && !aiRegions.find(r => r.id === id)) {
-            newRegions.push({
+        // Avoid duplicates
+        if (!parsedRegions.find(r => r.id === id)) {
+            parsedRegions.push({
                 id,
                 start,
                 end,
                 content: 'AI Diagnosis',
-                color: 'rgba(168, 85, 247, 0.4)'
+                color: 'rgba(168, 85, 247, 0.9)' // Purple-500 equivalent, high visibility
             });
         }
     }
-    if (newRegions.length > 0) setAiRegions(prev => [...prev, ...newRegions]);
-  }, [aiAnalysisOutput]);
+    
+    // Update state if regions have changed
+    const isDifferent = JSON.stringify(parsedRegions) !== JSON.stringify(aiRegions);
+    if (isDifferent) {
+        setAiRegions(parsedRegions);
+        // Log new findings
+        if (parsedRegions.length > aiRegions.length) {
+            addLog(`Gemini found ${parsedRegions.length} temporal anomalies.`);
+        }
+    }
+  }, [aiAnalysisOutput, aiRegions]);
 
   const handleClinicalRegionsLoaded = (regions: RegionData[], fileName: string) => {
       setClinicalRegions(regions);
