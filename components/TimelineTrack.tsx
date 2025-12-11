@@ -60,15 +60,19 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   // This allows AI labels to "unlock" the view even if human labels aren't uploaded yet.
   const showDropZone = clinicalRegions.length === 0 && aiRegions.length === 0;
 
-  // Calculate Scroll Position (Centered Playhead)
-  // We want the currentTime to be roughly in the center of the container
-  // scrollX = (currentTime * PPS) - (containerWidth / 2)
+  // Calculate Scroll Position with Clamping
   const currentPixel = currentTime * PIXELS_PER_SECOND;
-  const scrollLeft = Math.max(0, currentPixel - (containerWidth / 2));
-  
-  // Total width of the scrollable track
   const totalTrackWidth = Math.max(containerWidth, duration * PIXELS_PER_SECOND);
-
+  
+  // The maximum amount we can scroll left (right edge of content aligns with right edge of viewport)
+  const maxScroll = Math.max(0, totalTrackWidth - containerWidth);
+  
+  // Desired scroll places cursor in center
+  const targetScroll = currentPixel - (containerWidth / 2);
+  
+  // Clamp scroll between 0 and maxScroll
+  const scrollLeft = Math.max(0, Math.min(targetScroll, maxScroll));
+  
   // Define Swimlanes
   const lanes: SwimlaneData[] = [
     { id: 'wheeze', label: 'Wheezes', regions: wheezeRegions, colorClass: 'border-l border-white/20 opacity-90', badgeColor: 'text-red-400' },
