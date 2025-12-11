@@ -37,6 +37,10 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
+  // Drag State for visibility
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounter = useRef(0);
+
   // Resize Observer to handle responsive width
   useEffect(() => {
     if (!containerRef.current) return;
@@ -78,8 +82,46 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   // Row Height Calculation
   const rowHeight = 36; // px
 
+  // --- Drag & Drop Visibility Handlers ---
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (dragCounter.current === 1) {
+      setIsDraggingOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    // We do NOT stop propagation here to ensure LabelControlZone (child) gets the event if aimed there.
+    // However, we must reset our visual state.
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDraggingOver(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault(); // Essential to allow dropping
+  };
+
   return (
-    <div ref={containerRef} className="w-full h-full bg-slate-900/20 relative overflow-hidden group">
+    <div 
+        ref={containerRef} 
+        className="w-full h-full bg-slate-900/20 relative overflow-hidden group"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+    >
       
       {showDropZone ? (
          <div className="absolute inset-0 z-50 p-2 bg-slate-900/50 backdrop-blur-[1px]">
@@ -160,8 +202,9 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                 ))}
             </div>
 
-            {/* Clear Button Overlay */}
-            <div className="absolute top-2 right-2 z-50 pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-end space-y-2">
+            {/* Clear Button / Upload Overlay */}
+            {/* Logic updated: Show if hovered OR if dragging over anywhere in the track */}
+            <div className={`absolute top-2 right-2 z-50 pointer-events-auto transition-opacity duration-200 flex flex-col items-end space-y-2 ${isDraggingOver ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                 
                 {/* Always provide access to label uploader even if AI lane is driving the view */}
                 <div className="w-64 scale-90 origin-top-right">
