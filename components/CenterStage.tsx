@@ -270,7 +270,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
   // --- REGION / LABELS HANDLING ---
 
   useEffect(() => {
-    // Toggle visibility of regions
+    // Toggle visibility of existing regions
     if (regionsPluginRef.current) {
         const regions = regionsPluginRef.current.getRegions();
         regions.forEach((r: any) => {
@@ -279,12 +279,12 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
              }
         });
     }
-  }, [showLabels, hasLabels]);
+  }, [showLabels, hasLabels]); // Trigger when toggle changes or when we flag that we have labels
 
   // --- AI REGION PARSING ---
   
   useEffect(() => {
-    if (!aiAnalysisOutput || !regionsPluginRef.current || !showLabels) return;
+    if (!aiAnalysisOutput || !regionsPluginRef.current) return;
 
     // Regex to find timestamps: e.g. "0:02 - 0:05" or "1:15 - 1:20"
     const regex = /(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/g;
@@ -301,19 +301,16 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
         const start = startMin * 60 + startSec;
         const end = endMin * 60 + endSec;
 
-        // Check if this AI region already exists to avoid duplicates
-        // We look for a region with roughly same start/end and content "AI Diagnosis"
-        const alreadyExists = existingRegions.some((r: any) => {
-            return (
-                r.content?.innerText === 'AI Diagnosis' &&
-                Math.abs(r.start - start) < 0.1 && 
-                Math.abs(r.end - end) < 0.1
-            );
-        });
+        // Generate a deterministic ID for this time range
+        // This prevents adding the same region twice if the stream updates
+        const regionId = `ai-region-${start}-${end}`;
+
+        const alreadyExists = existingRegions.some((r: any) => r.id === regionId);
 
         if (!alreadyExists) {
             addLog(`AI Detection found: ${match[0]} (${start}s - ${end}s)`);
-            regionsPluginRef.current.addRegion({
+            const newRegion = regionsPluginRef.current.addRegion({
+                id: regionId,
                 start,
                 end,
                 content: 'AI Diagnosis',
@@ -321,7 +318,13 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
                 drag: false,
                 resize: false,
             });
-            // Ensure labels are on
+            
+            // Immediately apply current visibility preference
+            if (newRegion.element) {
+                newRegion.element.style.display = showLabels ? 'block' : 'none';
+            }
+
+            // Ensure we know we have labels now
             if (!hasLabels) setHasLabels(true);
         }
     }
@@ -341,19 +344,16 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
           if (!text || !regionsPluginRef.current) return;
 
           addLog("Parsing ICBHI clinical data...");
-          // We intentionally do NOT clear existing AI regions here, only clinical ones if needed, 
-          // but for now, let's clear everything to avoid mess, or filter.
-          // Requirement says "Clear existing regions (if any) to prevent duplicates".
-          // But we also want to keep AI regions. 
-          // Let's remove only clinical regions (Wheeze/Crackle) before import?
-          // For simplicity complying to previous prompt, we clear all or none. 
-          // Let's clear all to be safe as per "Clear existing regions" instruction.
+          
+          // Clear only CLINICAL regions? Or all? 
+          // Previous instruction said "Clear existing regions". 
+          // To be safe and clean, we remove everything to avoid ID conflicts or mess.
           regionsPluginRef.current.clearRegions(); 
 
           const lines = text.split('\n');
           let count = 0;
 
-          lines.forEach(line => {
+          lines.forEach((line, idx) => {
               if (!line.trim()) return;
               // Format: Start \t End \t Crackles \t Wheezes
               const parts = line.split('\t').map(s => s.trim());
@@ -366,8 +366,12 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
 
               if (isNaN(start) || isNaN(end)) return;
 
+              // Generate IDs for clinical labels too
+              const idBase = `clinical-${idx}-${start}-${end}`;
+
               if (wheezes === 1) {
                   regionsPluginRef.current.addRegion({
+                      id: `${idBase}-wheeze`,
                       start,
                       end,
                       content: 'Wheeze',
@@ -379,6 +383,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
               }
               if (crackles === 1) {
                   regionsPluginRef.current.addRegion({
+                      id: `${idBase}-crackle`,
                       start,
                       end,
                       content: 'Crackle',

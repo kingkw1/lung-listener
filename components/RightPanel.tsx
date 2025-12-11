@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2 } from 'lucide-react';
+import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2, Copy, Check, Terminal, FileCode } from 'lucide-react';
 import { AudioFile, AnalysisStatus } from '../types';
 import { motion } from 'framer-motion';
 import { GoogleGenAI } from "@google/genai";
@@ -43,6 +43,71 @@ interface RightPanelProps {
   setAiAnalysisOutput: React.Dispatch<React.SetStateAction<string>>;
 }
 
+// --- HELPER COMPONENTS ---
+
+const CodeBlock = ({ language, code }: { language: string, code: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="mt-4 mb-4 rounded-lg overflow-hidden border border-slate-700 bg-slate-950 shadow-lg">
+      <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
+        <div className="flex items-center space-x-2 text-slate-400">
+           <Terminal size={14} />
+           <span className="text-xs font-mono font-medium text-cyan-500">Generated Research Tool: Audio Filter</span>
+        </div>
+        <button 
+          onClick={handleCopy}
+          className="flex items-center space-x-1 text-[10px] text-slate-500 hover:text-cyan-400 transition-colors"
+        >
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          <span>{copied ? 'Copied' : 'Copy Code'}</span>
+        </button>
+      </div>
+      <div className="p-4 overflow-x-auto">
+        <pre className="font-mono text-xs text-slate-300 leading-relaxed">
+          <code>{code}</code>
+        </pre>
+      </div>
+    </div>
+  );
+};
+
+// Simple Markdown parser to handle code blocks
+const MessageContent = ({ content }: { content: string }) => {
+  // Split by triple backticks
+  const parts = content.split(/```/);
+
+  return (
+    <div className="w-full">
+      {parts.map((part, index) => {
+        // Even indices are text, Odd indices are code (assuming standard markdown)
+        if (index % 2 === 1) {
+          // Extract language (if any) and code
+          const lines = part.split('\n');
+          const language = lines[0].trim() || 'python';
+          const code = lines.slice(1).join('\n');
+          return <CodeBlock key={index} language={language} code={code} />;
+        } else {
+          // Render regular text
+          if (!part.trim()) return null;
+          return (
+             <div key={index} className="prose prose-invert prose-sm max-w-none text-slate-300 whitespace-pre-wrap leading-relaxed mb-2">
+                {part}
+             </div>
+          );
+        }
+      })}
+    </div>
+  );
+};
+
+
 export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisStatus, setAnalysisStatus, setAiAnalysisOutput }) => {
   const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
 
@@ -63,10 +128,12 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
         const audioPart = await fileToGenerativePart(blob);
 
         // 3. Construct System Prompt & User Prompt
+        // UPDATED: Added Section 4 for Python Code
         const systemInstruction = `You are an expert Pulmonologist. Analyze this audio waveform.
 1. Quality Check: Briefly assess signal-to-noise ratio.
 2. Timeline Analysis: You MUST provide specific timestamps (e.g., '0:02 - 0:05') for the most distinct anomalies. If a sound is continuous, mark the start and end of the most intense segment.
-3. Diagnosis: Brief, bulleted potential causes.`;
+3. Diagnosis: Brief, bulleted potential causes.
+4. Remediation Code: Based on the anomalies found (e.g., Low-frequency heartbeats or High-frequency hiss), generate a robust Python function using \`scipy.signal\` to filter this specific audio. Include comments explaining why you chose these cutoff frequencies. Label this section "Generated Research Tool: Audio Filter".`;
         
         const userPrompt = "Analyze this audio. Locate the exact start/end time of the clearest Wheeze or Crackle.";
 
@@ -155,9 +222,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
                 
                 {msg.role === 'assistant' && (
                     <div className="bg-slate-800/80 border border-slate-700 rounded-lg p-4 w-full shadow-sm">
-                        <div className="prose prose-invert prose-sm max-w-none text-slate-300 whitespace-pre-wrap leading-relaxed">
-                            {msg.content}
-                        </div>
+                        <MessageContent content={msg.content} />
                     </div>
                 )}
             </motion.div>
