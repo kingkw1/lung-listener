@@ -151,7 +151,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         // 2. Convert to GenAI Format
         const audioPart = await fileToGenerativePart(blob);
         
-        setProgressMessage("Gemini 1.5 Pro is reasoning...");
+        setProgressMessage("Gemini 3 Pro is reasoning...");
 
         // 3. Construct System Prompt & User Prompt
         const systemInstruction = `You are an expert Pulmonologist. Analyze this audio waveform.
@@ -164,8 +164,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         const userPrompt = "Analyze this audio. Locate the exact start/end time of the clearest Wheeze or Crackle.";
 
         // 4. Initialize Model
+        // Using Gemini 3 Pro Preview per Hackathon requirements
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-pro",
+            model: "gemini-3-pro-preview",
             systemInstruction: systemInstruction 
         });
 
@@ -235,7 +236,7 @@ Date: ${timestamp}
 
 ---
 
-## AI DIAGNOSTIC FINDINGS (GEMINI 1.5 PRO)
+## AI DIAGNOSTIC FINDINGS (GEMINI 3 PRO)
 ${cleanAnalysis}
 
 ---
@@ -267,7 +268,7 @@ ${aiFilterConfig ? `
         <div>
           <div className="flex items-center space-x-2 text-cyan-400 mb-1">
               <Sparkles size={18} />
-              <h2 className="text-sm font-bold uppercase tracking-wider">Gemini 1.5 Pro Analysis</h2>
+              <h2 className="text-sm font-bold uppercase tracking-wider">Gemini 3 Pro Analysis</h2>
           </div>
           <p className="text-xs text-slate-500">Multimodal Diagnostic Engine</p>
         </div>
