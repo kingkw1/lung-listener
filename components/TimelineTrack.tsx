@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { RegionData } from '../types';
 import { LabelControlZone } from './LabelControlZone';
 
@@ -10,49 +10,18 @@ interface TimelineTrackProps {
   onRegionsLoaded: (regions: RegionData[], fileName: string) => void;
   onClear: () => void;
   currentLabelFile: string | null;
-  currentTime?: number; // New prop for playhead
+  currentTime?: number;
 }
 
-const SwimlaneRow: React.FC<{
+const PIXELS_PER_SECOND = 50; // Matches WaveSurfer default minPxPerSec
+
+interface SwimlaneData {
+  id: string;
   label: string;
   regions: RegionData[];
-  duration: number;
   colorClass: string;
-  onSeek: (time: number) => void;
-  heightClass?: string;
-  badgeColor?: string;
-}> = ({ label, regions, duration, colorClass, onSeek, heightClass = "h-8", badgeColor = "bg-slate-700 text-slate-300" }) => {
-  return (
-    <div className={`relative ${heightClass} border-b border-slate-800/50 w-full`}>
-       {/* Badge Label (Inside Viewport) */}
-       <div className={`absolute top-1 left-2 z-20 pointer-events-none px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider opacity-50 ${badgeColor}`}>
-          {label}
-       </div>
-
-       {/* Regions */}
-       <div className="absolute inset-0 top-1 bottom-1">
-        {regions.map((region) => {
-            const left = (region.start / duration) * 100;
-            const width = Math.max(0.2, ((region.end - region.start) / duration) * 100); // Min width
-            
-            return (
-                <div
-                key={region.id}
-                onClick={() => onSeek(region.start)}
-                className={`absolute top-0 bottom-0 rounded-sm cursor-pointer hover:brightness-110 hover:z-30 transition-all border-l border-white/20 ${colorClass}`}
-                style={{ 
-                    left: `${left}%`, 
-                    width: `${width}%`,
-                    backgroundColor: region.color 
-                }}
-                title={`${region.content} (${region.start.toFixed(2)}s - ${region.end.toFixed(2)}s)`}
-                />
-            );
-        })}
-       </div>
-    </div>
-  );
-};
+  badgeColor: string;
+}
 
 export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   duration,
@@ -64,31 +33,52 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   currentLabelFile,
   currentTime = 0
 }) => {
-  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Resize Observer to handle responsive width
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const wheezeRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('wheeze'));
   const crackleRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('crackle'));
-  
   const showDropZone = clinicalRegions.length === 0;
+
+  // Calculate Scroll Position (Centered Playhead)
+  // We want the currentTime to be roughly in the center of the container
+  // scrollX = (currentTime * PPS) - (containerWidth / 2)
+  const currentPixel = currentTime * PIXELS_PER_SECOND;
+  const scrollLeft = Math.max(0, currentPixel - (containerWidth / 2));
   
-  // Calculate playhead position
-  const playheadLeft = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // Total width of the scrollable track
+  const totalTrackWidth = Math.max(containerWidth, duration * PIXELS_PER_SECOND);
+
+  // Define Swimlanes
+  const lanes: SwimlaneData[] = [
+    { id: 'wheeze', label: 'Wheezes', regions: wheezeRegions, colorClass: 'border-l border-white/20 opacity-90', badgeColor: 'text-red-400' },
+    { id: 'crackle', label: 'Crackles', regions: crackleRegions, colorClass: 'border-l border-white/20 opacity-90', badgeColor: 'text-amber-400' },
+  ];
+
+  if (aiRegions.length > 0) {
+    lanes.push({ id: 'ai', label: 'Gemini AI', regions: aiRegions, colorClass: 'shadow-[0_0_8px_rgba(168,85,247,0.3)] opacity-80', badgeColor: 'text-purple-400' });
+  }
+
+  // Row Height Calculation
+  const rowHeight = 36; // px
 
   return (
-    <div className="w-full h-full flex flex-col justify-center bg-slate-900/20 relative">
+    <div ref={containerRef} className="w-full h-full bg-slate-900/20 relative overflow-hidden group">
       
-      {/* Playhead Cursor */}
-      <div 
-        className="absolute top-0 bottom-0 w-px bg-white z-40 pointer-events-none shadow-[0_0_4px_rgba(255,255,255,0.5)] transition-all duration-75"
-        style={{ left: `${playheadLeft}%` }}
-      />
-
-      {/* Background Grid Lines (1 sec intervals) - Simulation */}
-      <div className="absolute inset-0 pointer-events-none opacity-10" 
-           style={{ backgroundImage: 'linear-gradient(90deg, #475569 1px, transparent 1px)', backgroundSize: `${(1/duration)*100}% 100%` }}>
-      </div>
-
       {showDropZone ? (
-         <div className="p-2 h-full">
+         <div className="absolute inset-0 z-50 p-2 bg-slate-900/50 backdrop-blur-[1px]">
             <LabelControlZone 
                 onRegionsLoaded={onRegionsLoaded}
                 onClear={onClear}
@@ -98,45 +88,84 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
          </div>
       ) : (
         <>
-            <SwimlaneRow 
-                label="Wheezes" 
-                regions={wheezeRegions} 
-                duration={duration} 
-                colorClass="opacity-90" 
-                onSeek={onSeek}
-                badgeColor="bg-red-900/50 text-red-400"
-            />
-            <SwimlaneRow 
-                label="Crackles" 
-                regions={crackleRegions} 
-                duration={duration} 
-                colorClass="opacity-90" 
-                onSeek={onSeek}
-                badgeColor="bg-amber-900/50 text-amber-400"
-            />
-            
-            {/* Overlay Control to clear */}
-            <div className="absolute top-1 right-2 z-30 opacity-0 hover:opacity-100 transition-opacity">
+            {/* --- SCROLLING LAYER --- */}
+            <div 
+                className="absolute top-0 h-full will-change-transform"
+                style={{ 
+                    width: `${totalTrackWidth}px`,
+                    transform: `translateX(-${scrollLeft}px)` 
+                }}
+            >
+                {/* Background Grid (1s intervals) */}
+                <div 
+                    className="absolute inset-0 pointer-events-none opacity-10" 
+                    style={{ 
+                        backgroundImage: 'linear-gradient(90deg, #475569 1px, transparent 1px)', 
+                        backgroundSize: `${PIXELS_PER_SECOND}px 100%` 
+                    }}
+                />
+
+                {/* Swimlanes Data */}
+                {lanes.map((lane, index) => (
+                    <div 
+                        key={lane.id} 
+                        className="absolute w-full border-b border-slate-800/30"
+                        style={{ 
+                            top: index * rowHeight, 
+                            height: rowHeight 
+                        }}
+                    >
+                        {lane.regions.map(region => (
+                            <div
+                                key={region.id}
+                                onClick={(e) => { e.stopPropagation(); onSeek(region.start); }}
+                                className={`absolute top-1 bottom-1 rounded-sm cursor-pointer hover:brightness-125 transition-all ${lane.colorClass}`}
+                                style={{
+                                    left: `${region.start * PIXELS_PER_SECOND}px`,
+                                    width: `${Math.max(2, (region.end - region.start) * PIXELS_PER_SECOND)}px`,
+                                    backgroundColor: region.color
+                                }}
+                                title={`${region.content} (${region.start.toFixed(2)}s - ${region.end.toFixed(2)}s)`}
+                            />
+                        ))}
+                    </div>
+                ))}
+
+                {/* Playhead Cursor (Absolute Position in Track) */}
+                <div 
+                    className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none shadow-[0_0_8px_rgba(255,255,255,0.6)]"
+                    style={{ left: `${currentPixel}px` }}
+                />
+            </div>
+
+            {/* --- FIXED OVERLAY LAYER (Labels) --- */}
+            <div className="absolute inset-0 pointer-events-none">
+                {lanes.map((lane, index) => (
+                    <div 
+                        key={lane.id}
+                        className="absolute left-0 w-full flex items-center px-2 border-b border-transparent"
+                        style={{ 
+                            top: index * rowHeight, 
+                            height: rowHeight 
+                        }}
+                    >
+                         <div className={`px-1.5 py-0.5 rounded bg-slate-900/80 backdrop-blur-sm text-[9px] font-bold uppercase tracking-wider shadow-sm border border-slate-800 ${lane.badgeColor}`}>
+                             {lane.label}
+                         </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Clear Button Overlay */}
+            <div className="absolute top-2 right-2 z-50 pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity">
                 <button 
                   onClick={onClear}
-                  className="px-2 py-1 text-[10px] bg-slate-800 text-red-400 border border-slate-700 rounded hover:bg-slate-700"
+                  className="px-2 py-1 text-[10px] bg-slate-800 text-red-400 border border-slate-700 rounded hover:bg-slate-700 shadow-lg"
                 >
                   Clear Labels
                 </button>
             </div>
         </>
-      )}
-
-      {/* AI Lane - Always visible if data exists */}
-      {aiRegions.length > 0 && (
-          <SwimlaneRow 
-            label="Gemini AI" 
-            regions={aiRegions} 
-            duration={duration} 
-            colorClass="opacity-80 shadow-[0_0_8px_rgba(168,85,247,0.2)]" 
-            onSeek={onSeek}
-            badgeColor="bg-purple-900/50 text-purple-400"
-          />
       )}
     </div>
   );

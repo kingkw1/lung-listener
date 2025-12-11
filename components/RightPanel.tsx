@@ -51,7 +51,12 @@ interface RightPanelProps {
 
 // --- HELPER COMPONENTS ---
 
-const CodeBlock = ({ language, code }: { language: string, code: string }) => {
+interface CodeBlockProps {
+  language: string;
+  code: string;
+}
+
+const CodeBlock: React.FC<CodeBlockProps> = ({ language, code }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -85,7 +90,7 @@ const CodeBlock = ({ language, code }: { language: string, code: string }) => {
 };
 
 // Simple Markdown parser to handle code blocks
-const MessageContent = ({ content }: { content: string }) => {
+const MessageContent: React.FC<{ content: string }> = ({ content }) => {
   // Split by triple backticks
   const parts = content.split(/```/);
 
