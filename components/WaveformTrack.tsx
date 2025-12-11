@@ -120,8 +120,8 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
             Spectrogram.create({
               labels: true,
               height: 140, 
-              labelsColor: '#64748b',
-              labelsBackground: 'transparent',
+              labelsColor: '#ffffff', // White labels for better contrast
+              labelsBackground: 'rgba(2, 6, 23, 0.7)', // Dark background to ensure legibility on loud signals
               frequencyMin: 0,
               frequencyMax: 4000,
               fftSamples: 1024,
