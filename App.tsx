@@ -40,6 +40,7 @@ const App: React.FC = () => {
           aiAnalysisOutput={aiAnalysisOutput}
           aiFilterConfig={aiFilterConfig}
           isFilterActive={isFilterActive}
+          patientData={patientData}
         />
       </main>
 
