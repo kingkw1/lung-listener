@@ -19,6 +19,12 @@ export interface AnalysisSession {
   resultSummary: string;
 }
 
+export interface AIFilterConfig {
+  type: 'lowpass' | 'highpass' | 'bandpass';
+  frequency: number;
+  Q: number;
+}
+
 export enum AnalysisStatus {
   IDLE = 'IDLE',
   ANALYZING = 'ANALYZING',

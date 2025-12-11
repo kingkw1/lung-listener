@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2, Copy, Check, Terminal, FileCode } from 'lucide-react';
-import { AudioFile, AnalysisStatus } from '../types';
+import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2, Copy, Check, Terminal, FileCode, Sliders, ToggleLeft, ToggleRight } from 'lucide-react';
+import { AudioFile, AnalysisStatus, AIFilterConfig } from '../types';
 import { motion } from 'framer-motion';
 import { GoogleGenAI } from "@google/genai";
 
@@ -41,6 +41,10 @@ interface RightPanelProps {
   analysisStatus: AnalysisStatus;
   setAnalysisStatus: React.Dispatch<React.SetStateAction<AnalysisStatus>>;
   setAiAnalysisOutput: React.Dispatch<React.SetStateAction<string>>;
+  setAiFilterConfig: React.Dispatch<React.SetStateAction<AIFilterConfig | null>>;
+  aiFilterConfig: AIFilterConfig | null;
+  isFilterActive: boolean;
+  setIsFilterActive: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 // --- HELPER COMPONENTS ---
@@ -108,7 +112,16 @@ const MessageContent = ({ content }: { content: string }) => {
 };
 
 
-export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisStatus, setAnalysisStatus, setAiAnalysisOutput }) => {
+export const RightPanel: React.FC<RightPanelProps> = ({ 
+  currentFile, 
+  analysisStatus, 
+  setAnalysisStatus, 
+  setAiAnalysisOutput,
+  setAiFilterConfig,
+  aiFilterConfig,
+  isFilterActive,
+  setIsFilterActive
+}) => {
   const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
 
   // Phase 3: Real Gemini API Integration
@@ -118,6 +131,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
     setAnalysisStatus(AnalysisStatus.ANALYZING);
     setMessages([]); // Clear previous analysis
     setAiAnalysisOutput(""); // Reset shared state
+    setAiFilterConfig(null);
+    setIsFilterActive(false);
 
     try {
         // 1. Retrieve the Blob from the local ObjectURL
@@ -128,17 +143,17 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
         const audioPart = await fileToGenerativePart(blob);
 
         // 3. Construct System Prompt & User Prompt
-        // UPDATED: Added Section 4 for Python Code
+        // UPDATED: Added Section 4 for Python Code and Section 5 for JSON Filter Params
         const systemInstruction = `You are an expert Pulmonologist. Analyze this audio waveform.
 1. Quality Check: Briefly assess signal-to-noise ratio.
 2. Timeline Analysis: You MUST provide specific timestamps (e.g., '0:02 - 0:05') for the most distinct anomalies. If a sound is continuous, mark the start and end of the most intense segment.
 3. Diagnosis: Brief, bulleted potential causes.
-4. Remediation Code: Based on the anomalies found (e.g., Low-frequency heartbeats or High-frequency hiss), generate a robust Python function using \`scipy.signal\` to filter this specific audio. Include comments explaining why you chose these cutoff frequencies. Label this section "Generated Research Tool: Audio Filter".`;
+4. Remediation Code: Based on the anomalies found (e.g., Low-frequency heartbeats or High-frequency hiss), generate a robust Python function using \`scipy.signal\` to filter this specific audio. Include comments explaining why you chose these cutoff frequencies. Label this section "Generated Research Tool: Audio Filter".
+5. Filter Parameters: You MUST output a JSON object at the very end of your response for the recommended filter settings to be used in a Web Audio API BiquadFilterNode. Format: {"recommendedFilter": {"type": "highpass" | "lowpass" | "bandpass", "frequency": number, "Q": number}}. Do not use markdown for this JSON block, just the raw JSON string at the end.`;
         
         const userPrompt = "Analyze this audio. Locate the exact start/end time of the clearest Wheeze or Crackle.";
 
         // 4. Initialize Stream
-        // Note: Using the new SDK structure `ai.models.generateContentStream`
         const result = await ai.models.generateContentStream({
             model: 'gemini-2.0-flash-exp',
             config: {
@@ -166,6 +181,21 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
                 fullResponse += chunkText;
                 setMessages([{ role: 'assistant', content: fullResponse }]);
                 setAiAnalysisOutput(fullResponse); // Update shared state for visualization
+
+                // Attempt to parse JSON filter config from the accumulating tail
+                // We utilize a fairly permissive regex to catch the JSON object even if it has extra whitespace
+                const jsonRegex = /\{"recommendedFilter":\s*\{[\s\S]*?\}\}/;
+                const match = fullResponse.match(jsonRegex);
+                if (match) {
+                    try {
+                        const json = JSON.parse(match[0]);
+                        if (json.recommendedFilter) {
+                             setAiFilterConfig(json.recommendedFilter);
+                        }
+                    } catch (e) {
+                        // Ignore partial JSON parse errors as the stream continues
+                    }
+                }
             }
         }
 
@@ -185,12 +215,34 @@ export const RightPanel: React.FC<RightPanelProps> = ({ currentFile, analysisSta
     <div className="flex flex-col h-full bg-slate-900 border-l border-slate-800">
       
       {/* Header */}
-      <div className="p-5 border-b border-slate-800 bg-slate-900 sticky top-0 z-10">
-        <div className="flex items-center space-x-2 text-cyan-400 mb-1">
-            <Sparkles size={18} />
-            <h2 className="text-sm font-bold uppercase tracking-wider">Gemini 3 Pro Analysis</h2>
+      <div className="p-5 border-b border-slate-800 bg-slate-900 sticky top-0 z-10 flex justify-between items-center">
+        <div>
+          <div className="flex items-center space-x-2 text-cyan-400 mb-1">
+              <Sparkles size={18} />
+              <h2 className="text-sm font-bold uppercase tracking-wider">Gemini 3 Pro Analysis</h2>
+          </div>
+          <p className="text-xs text-slate-500">Multimodal Diagnostic Engine</p>
         </div>
-        <p className="text-xs text-slate-500">Multimodal Diagnostic Engine</p>
+        
+        {/* AI Filter Toggle */}
+        {aiFilterConfig && (
+            <div className="flex flex-col items-end">
+                <div className="flex items-center space-x-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isFilterActive ? 'text-green-400' : 'text-slate-500'}`}>
+                        {isFilterActive ? 'AI Filter Active' : 'Apply AI Filter'}
+                    </span>
+                    <button 
+                        onClick={() => setIsFilterActive(!isFilterActive)}
+                        className={`transition-colors duration-200 ${isFilterActive ? 'text-green-500' : 'text-slate-600 hover:text-slate-400'}`}
+                    >
+                        {isFilterActive ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                    </button>
+                </div>
+                <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                    {aiFilterConfig.type} @ {aiFilterConfig.frequency}Hz
+                </div>
+            </div>
+        )}
       </div>
 
       {/* Content Area (Scrollable) */}

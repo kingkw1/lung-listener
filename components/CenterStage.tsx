@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, DragEvent } from 'react';
 import { UploadCloud, FileAudio, X, FileText, Tag, Eye, EyeOff } from 'lucide-react';
-import { AudioFile } from '../types';
+import { AudioFile, AIFilterConfig } from '../types';
 import { AudioPlayer } from './AudioPlayer';
 import { DebugLog } from './DebugLog';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,8 @@ interface CenterStageProps {
   currentFile: AudioFile | null;
   setCurrentFile: React.Dispatch<React.SetStateAction<AudioFile | null>>;
   aiAnalysisOutput: string;
+  aiFilterConfig: AIFilterConfig | null;
+  isFilterActive: boolean;
 }
 
 // --- SCIENTIFIC HELPER FUNCTIONS ---
@@ -56,7 +58,13 @@ const getPlasmaColormap = () => {
     return colors;
 };
 
-export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurrentFile, aiAnalysisOutput }) => {
+export const CenterStage: React.FC<CenterStageProps> = ({ 
+  currentFile, 
+  setCurrentFile, 
+  aiAnalysisOutput, 
+  aiFilterConfig, 
+  isFilterActive 
+}) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +73,10 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const regionsPluginRef = useRef<any>(null); // Keep reference to regions plugin
+  
+  // Persistent AudioContext for Web Audio API features (Filters)
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   // Audio State for the Player
   const [isPlaying, setIsPlaying] = useState(false);
@@ -96,6 +108,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
     setCurrentTime(0);
     setDuration(0);
     setHasLabels(false);
+    mediaSourceRef.current = null; // Reset source ref
     
     addLog(`File loaded: ${currentFile.name} (${currentFile.type})`);
 
@@ -134,6 +147,11 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
           wavesurferRef.current.destroy();
           wavesurferRef.current = null;
         }
+        
+        // Ensure AudioContext
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
 
         addLog("Initializing WaveSurfer Engine...");
 
@@ -142,9 +160,11 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
         regionsPluginRef.current = wsRegions;
 
         // 4. Create Instance
+        // IMPORTANT: We share the audioContext but we DO NOT let WS create the source node implicitly for filters,
+        // we will manage the graph manually.
         ws = WaveSurfer.create({
           container: containerRef.current,
-          waveColor: '#06b6d4',      // Medical Cyan
+          waveColor: '#06b6d4',      // Medical Cyan (default)
           progressColor: '#cffafe',  // Bright Cyan for progress
           cursorColor: '#ffffff',    // White cursor
           cursorWidth: 2,
@@ -155,6 +175,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
           minPxPerSec: 50,
           fillParent: true,
           autoScroll: true,
+          audioContext: audioContextRef.current, // Use shared context
           plugins: [
             Spectrogram.create({
               labels: true,
@@ -264,8 +285,75 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
       }
       wavesurferRef.current = null;
       regionsPluginRef.current = null;
+      // Note: We don't close AudioContext to allow reuse
     };
   }, [currentFile]); 
+
+  // --- AI FILTER APPLICATION (MANUAL WEB AUDIO GRAPH) ---
+
+  useEffect(() => {
+    const ws = wavesurferRef.current;
+    // We wait for WS to be ready and for the AC to exist
+    if (!ws || !isReady || !audioContextRef.current) return;
+
+    const ac = audioContextRef.current;
+    const mediaElement = ws.getMediaElement();
+    
+    if (!mediaElement) return;
+
+    // 1. Initialize Singleton Source Node
+    // We only create this once per MediaElement to avoid InvalidStateError
+    if (!mediaSourceRef.current) {
+        try {
+            mediaSourceRef.current = ac.createMediaElementSource(mediaElement);
+        } catch (e) {
+            addLog(`Audio Graph Warning: Could not create source. It might already exist. ${e}`);
+            // If we can't get the source, we can't filter.
+            return;
+        }
+    }
+
+    const source = mediaSourceRef.current;
+
+    // 2. Reset Graph: Disconnect everything first
+    try {
+        source.disconnect();
+    } catch (e) {
+        // Ignore disconnection errors
+    }
+
+    // 3. Apply Filter if Active
+    if (isFilterActive && aiFilterConfig) {
+        addLog(`Applying AI Filter: ${aiFilterConfig.type} @ ${aiFilterConfig.frequency}Hz`);
+        
+        // Create Filter Node
+        const filter = ac.createBiquadFilter();
+        filter.type = aiFilterConfig.type;
+        filter.frequency.value = aiFilterConfig.frequency;
+        filter.Q.value = aiFilterConfig.Q;
+        
+        // Connect: Source -> Filter -> Destination
+        source.connect(filter);
+        filter.connect(ac.destination);
+        
+        // Visual Feedback: Green
+        ws.setOptions({
+            waveColor: '#22c55e', 
+            progressColor: '#4ade80'
+        });
+    } else {
+        // Connect: Source -> Destination (Direct)
+        source.connect(ac.destination);
+        
+        // Visual Feedback: Cyan (Default)
+        ws.setOptions({
+            waveColor: '#06b6d4', 
+            progressColor: '#cffafe'
+        });
+    }
+
+  }, [isFilterActive, aiFilterConfig, isReady]);
+
 
   // --- REGION / LABELS HANDLING ---
 
@@ -302,7 +390,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
         const end = endMin * 60 + endSec;
 
         // Generate a deterministic ID for this time range
-        // This prevents adding the same region twice if the stream updates
         const regionId = `ai-region-${start}-${end}`;
 
         const alreadyExists = existingRegions.some((r: any) => r.id === regionId);
@@ -345,9 +432,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
 
           addLog("Parsing ICBHI clinical data...");
           
-          // Clear only CLINICAL regions? Or all? 
-          // Previous instruction said "Clear existing regions". 
-          // To be safe and clean, we remove everything to avoid ID conflicts or mess.
           regionsPluginRef.current.clearRegions(); 
 
           const lines = text.split('\n');
@@ -603,10 +687,10 @@ export const CenterStage: React.FC<CenterStageProps> = ({ currentFile, setCurren
               </div>
 
               {/* Combined Visualization Container */}
-              <div className="flex-1 bg-slate-900 rounded-lg border border-slate-800 relative overflow-hidden flex flex-col">
+              <div className={`flex-1 bg-slate-900 rounded-lg border ${isFilterActive ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'border-slate-800'} transition-all duration-500 relative overflow-hidden flex flex-col`}>
                   {/* Title Overlays */}
                   <div className="absolute top-2 left-2 z-20 pointer-events-none">
-                     <span className="bg-slate-950/80 border border-slate-800 text-cyan-500 text-[10px] px-2 py-0.5 rounded font-mono">AMPLITUDE</span>
+                     <span className={`bg-slate-950/80 border border-slate-800 text-[10px] px-2 py-0.5 rounded font-mono ${isFilterActive ? 'text-green-400' : 'text-cyan-500'}`}>AMPLITUDE {isFilterActive ? '(FILTERED)' : ''}</span>
                   </div>
                   <div className="absolute top-[110px] left-2 z-20 pointer-events-none">
                      <span className="bg-slate-950/80 border border-slate-800 text-amber-500 text-[10px] px-2 py-0.5 rounded font-mono">SPECTROGRAM (0-4kHz)</span>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CenterStage } from './components/CenterStage';
 import { RightPanel } from './components/RightPanel';
-import { PatientContextData, AudioFile, AnalysisStatus } from './types';
+import { PatientContextData, AudioFile, AnalysisStatus, AIFilterConfig } from './types';
 
 const App: React.FC = () => {
   const [patientData, setPatientData] = useState<PatientContextData>({
@@ -15,6 +15,10 @@ const App: React.FC = () => {
   
   // Shared state for AI text stream
   const [aiAnalysisOutput, setAiAnalysisOutput] = useState<string>("");
+
+  // Shared state for AI Filter
+  const [aiFilterConfig, setAiFilterConfig] = useState<AIFilterConfig | null>(null);
+  const [isFilterActive, setIsFilterActive] = useState(false);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
@@ -34,6 +38,8 @@ const App: React.FC = () => {
           currentFile={currentFile} 
           setCurrentFile={setCurrentFile}
           aiAnalysisOutput={aiAnalysisOutput}
+          aiFilterConfig={aiFilterConfig}
+          isFilterActive={isFilterActive}
         />
       </main>
 
@@ -44,6 +50,10 @@ const App: React.FC = () => {
           analysisStatus={analysisStatus}
           setAnalysisStatus={setAnalysisStatus}
           setAiAnalysisOutput={setAiAnalysisOutput}
+          setAiFilterConfig={setAiFilterConfig}
+          isFilterActive={isFilterActive}
+          setIsFilterActive={setIsFilterActive}
+          aiFilterConfig={aiFilterConfig}
         />
       </aside>
     </div>
