@@ -4,6 +4,9 @@ import { AudioFile, AnalysisStatus, AIFilterConfig, PatientContextData } from '.
 import { motion } from 'framer-motion';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// --- CONFIGURATION ---
+const ACTIVE_MODEL_STRING = "gemini-3-pro-preview";
+
 // --- AI INFRASTRUCTURE SETUP ---
 
 /**
@@ -164,9 +167,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         const userPrompt = "Analyze this audio. Locate the exact start/end time of the clearest Wheeze or Crackle.";
 
         // 4. Initialize Model
-        // Using Gemini 3 Pro Preview per Hackathon requirements
+        // Using defined constant for transparency
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-3-pro-preview",
+            model: ACTIVE_MODEL_STRING,
             systemInstruction: systemInstruction 
         });
 
@@ -236,7 +239,7 @@ Date: ${timestamp}
 
 ---
 
-## AI DIAGNOSTIC FINDINGS (GEMINI 3 PRO)
+## AI DIAGNOSTIC FINDINGS (${ACTIVE_MODEL_STRING})
 ${cleanAnalysis}
 
 ---
@@ -266,11 +269,15 @@ ${aiFilterConfig ? `
       {/* Header */}
       <div className="p-5 border-b border-slate-800 bg-slate-900 sticky top-0 z-10 flex justify-between items-center">
         <div>
-          <div className="flex items-center space-x-2 text-cyan-400 mb-1">
-              <Sparkles size={18} />
-              <h2 className="text-sm font-bold uppercase tracking-wider">Gemini 3 Pro Analysis</h2>
+          <div className="flex items-center space-x-3 text-slate-200 mb-1">
+              <Sparkles size={24} className="text-cyan-400" />
+              <h2 className="text-lg font-bold uppercase tracking-wider">
+                  Model: <span className="font-mono text-cyan-400">{ACTIVE_MODEL_STRING}</span>
+              </h2>
           </div>
-          <p className="text-xs text-slate-500">Multimodal Diagnostic Engine</p>
+          <div className="flex items-center space-x-2 mt-1">
+            <p className="text-sm text-slate-400 font-mono">Persona: Pulmonologist</p>
+          </div>
         </div>
       </div>
 
