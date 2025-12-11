@@ -3,16 +3,18 @@ import React, { useRef, useState, useEffect } from 'react';
 // Imports from the import map
 import WaveSurfer from 'wavesurfer.js';
 import Spectrogram from 'wavesurfer.js/dist/plugins/spectrogram.esm.js';
-import Timeline from 'wavesurfer.js/dist/plugins/timeline.esm.js';
 
 interface WaveformTrackProps {
   audioUrl: string;
   waveColor: string;
   progressColor: string;
-  onLog: (msg: string) => void;
   onReady?: (duration: number) => void;
   seekTo?: number | null; 
   onSeek?: (time: number) => void;
+  // Master Clock Props
+  isPlaying: boolean;
+  volume: number;
+  onTimeUpdate?: (time: number) => void; // Only provided if this track is the driver
 }
 
 // Generate a Plasma-like colormap (Blue -> Purple -> Red -> Yellow)
@@ -56,10 +58,12 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
   audioUrl,
   waveColor,
   progressColor,
-  onLog,
   onReady,
   seekTo,
-  onSeek
+  onSeek,
+  isPlaying,
+  volume,
+  onTimeUpdate
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
@@ -81,7 +85,6 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
              initTimer = window.setTimeout(() => initWaveSurfer(attempt + 1), 200);
              return;
           }
-          onLog("Error: DOM container failed to mount.");
           return;
         }
 
@@ -107,16 +110,16 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
           cursorWidth: 1, // Thinner cursor for track view
           barWidth: 2,
           barGap: 3,
-          height: 100, // Will be overridden by CSS flex, but sets base ratio
+          height: 100, 
           normalize: true,
           minPxPerSec: 50,
           fillParent: true,
           autoScroll: true,
-          interact: true, // Allow seeking on the waveform
+          interact: true, 
           plugins: [
             Spectrogram.create({
               labels: true,
-              height: 140, // Increased height for better visibility
+              height: 140, 
               labelsColor: '#64748b',
               labelsBackground: 'transparent',
               frequencyMin: 0,
@@ -124,8 +127,6 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
               fftSamples: 1024,
               colorMap: getPlasmaColormap(), 
             }),
-            // Removed Timeline plugin from here - we might want a global timeline track or per-track
-            // Keeping it simple for now, relying on MasterControls or implicit timeline
           ],
         });
 
@@ -136,12 +137,19 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
           const d = ws!.getDuration();
           if (onReady) onReady(d);
           injectStyles();
+          
+          // Apply initial volume/state
+          ws!.setVolume(volume);
         });
 
-        ws.on('finish', () => { /* Handle finish */ });
-        ws.on('error', (err) => onLog(`WaveSurfer Error: ${err}`));
+        // If this track is the DRIVER, report time updates
+        if (onTimeUpdate) {
+            ws.on('timeupdate', (time) => {
+                onTimeUpdate(time);
+            });
+        }
         
-        // Report interactions back to parent (to sync other tracks)
+        // Report interactions (scrubbing)
         ws.on('interaction', () => {
              const t = ws!.getCurrentTime();
              if (onSeek) onSeek(t);
@@ -150,7 +158,6 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
         wavesurferRef.current = ws;
 
       } catch (error: any) {
-        onLog(`Init Error: ${error.message}`);
         console.error(error);
       }
     };
@@ -164,10 +171,30 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
     };
   }, [audioUrl, waveColor, progressColor]);
 
-  // Handle External Seek
+  // Master Clock Sync: Play/Pause
+  useEffect(() => {
+      if (wavesurferRef.current && isReady) {
+          if (isPlaying) {
+              wavesurferRef.current.play();
+          } else {
+              wavesurferRef.current.pause();
+          }
+      }
+  }, [isPlaying, isReady]);
+
+  // Master Clock Sync: Volume
+  useEffect(() => {
+      if (wavesurferRef.current && isReady) {
+          wavesurferRef.current.setVolume(volume);
+      }
+  }, [volume, isReady]);
+
+  // Master Clock Sync: Seeking
   useEffect(() => {
     if (seekTo !== undefined && seekTo !== null && wavesurferRef.current && isReady) {
-        if (Math.abs(wavesurferRef.current.getCurrentTime() - seekTo) > 0.1) {
+        // Only seek if the difference is significant (> 0.1s) to prevent jitter loops
+        const current = wavesurferRef.current.getCurrentTime();
+        if (Math.abs(current - seekTo) > 0.15) {
             wavesurferRef.current.setTime(seekTo);
         }
     }
@@ -178,7 +205,6 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
      if (wrapper) {
          wrapper.style.overflow = 'visible';
          wrapper.style.zIndex = '10';
-         // Hide default scrollbar to keep UI clean
          const styleId = `ws-track-style-${waveColor.replace('#', '')}`;
          if (!document.getElementById(styleId)) {
             const style = document.createElement('style');

@@ -10,6 +10,7 @@ interface TimelineTrackProps {
   onRegionsLoaded: (regions: RegionData[], fileName: string) => void;
   onClear: () => void;
   currentLabelFile: string | null;
+  currentTime?: number; // New prop for playhead
 }
 
 const SwimlaneRow: React.FC<{
@@ -60,17 +61,27 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   onSeek,
   onRegionsLoaded,
   onClear,
-  currentLabelFile
+  currentLabelFile,
+  currentTime = 0
 }) => {
   
   const wheezeRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('wheeze'));
   const crackleRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('crackle'));
   
   const showDropZone = clinicalRegions.length === 0;
+  
+  // Calculate playhead position
+  const playheadLeft = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="w-full h-full flex flex-col justify-center bg-slate-900/20 relative">
       
+      {/* Playhead Cursor */}
+      <div 
+        className="absolute top-0 bottom-0 w-px bg-white z-40 pointer-events-none shadow-[0_0_4px_rgba(255,255,255,0.5)] transition-all duration-75"
+        style={{ left: `${playheadLeft}%` }}
+      />
+
       {/* Background Grid Lines (1 sec intervals) - Simulation */}
       <div className="absolute inset-0 pointer-events-none opacity-10" 
            style={{ backgroundImage: 'linear-gradient(90deg, #475569 1px, transparent 1px)', backgroundSize: `${(1/duration)*100}% 100%` }}>

@@ -1,11 +1,11 @@
 import React, { useRef, useState, useEffect, DragEvent } from 'react';
-import { UploadCloud, FileAudio, X, Loader2, Activity, Layers, ListMusic, Wand2 } from 'lucide-react';
+import { UploadCloud, FileAudio, X, Loader2, Activity, ListMusic, Wand2 } from 'lucide-react';
 import { AudioFile, AIFilterConfig, RegionData } from '../types';
 import { DebugLog } from './DebugLog';
-import { WaveformTrack } from './WaveformTrack'; // Updated import
-import { TimelineTrack } from './TimelineTrack'; // Updated import
-import { TrackRow } from './TrackRow'; // New Layout Component
-import { MasterControls } from './MasterControls'; // New Layout Component
+import { WaveformTrack } from './WaveformTrack'; 
+import { TimelineTrack } from './TimelineTrack';
+import { TrackRow } from './TrackRow';
+import { MasterControls } from './MasterControls';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface CenterStageProps {
@@ -15,7 +15,6 @@ interface CenterStageProps {
   aiFilterConfig: AIFilterConfig | null;
 }
 
-// Helper: Convert AudioBuffer to WAV Blob
 const bufferToWave = (abuffer: AudioBuffer, len: number) => {
   let numOfChan = abuffer.numberOfChannels,
       length = len * numOfChan * 2 + 44,
@@ -76,8 +75,14 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   const [filteredAudioUrl, setFilteredAudioUrl] = useState<string | null>(null);
   const [isProcessingFilter, setIsProcessingFilter] = useState(false);
 
-  // Playback Sync State
+  // --- MASTER CLOCK STATE ---
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  
+  // Controls seek updates propagated to children
   const [seekTarget, setSeekTarget] = useState<number | null>(null);
 
   // Logs
@@ -94,9 +99,23 @@ export const CenterStage: React.FC<CenterStageProps> = ({
       setFilteredAudioUrl(null);
       setDuration(0);
       setSeekTarget(null);
+      setIsPlaying(false);
+      setCurrentTime(0);
       setLogs([]);
       if(currentFile) addLog(`File loaded: ${currentFile.name}`);
   }, [currentFile]);
+
+  // --- PLAYBACK CONTROLLERS ---
+  const handleTogglePlay = () => setIsPlaying(!isPlaying);
+  
+  const handleSeek = (time: number) => {
+      setSeekTarget(time);
+      setCurrentTime(time);
+  };
+
+  const handleTimeUpdate = (time: number) => {
+      setCurrentTime(time);
+  };
 
   // --- OFFLINE AUDIO PROCESSING ---
   const processOfflineAudio = async () => {
@@ -188,10 +207,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({
       addLog('Labels cleared.');
   };
 
-  const handleSeek = (time: number) => {
-      setSeekTarget(time);
-  };
-
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); };
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault(); setIsDragging(false);
@@ -220,6 +235,11 @@ export const CenterStage: React.FC<CenterStageProps> = ({
     if (filteredAudioUrl) URL.revokeObjectURL(filteredAudioUrl);
     setCurrentFile(null);
   };
+
+  // Determine Driver Track
+  // If Filtered Audio exists, it is the driver (volume=1). Raw Audio becomes Slave (volume=0).
+  // Otherwise Raw Audio is driver.
+  const isFilteredDriver = !!filteredAudioUrl;
 
   return (
     <div className="flex flex-col h-full relative bg-slate-950">
@@ -281,19 +301,22 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                   height="260px"
                   controls={
                       <div className="flex space-x-2">
-                          <button className="px-2 py-0.5 text-[10px] bg-cyan-900/30 text-cyan-500 border border-cyan-900/50 rounded">Solo</button>
-                          <button className="px-2 py-0.5 text-[10px] bg-slate-800 text-slate-500 border border-slate-700 rounded">Mute</button>
+                          <button className="px-2 py-0.5 text-[10px] bg-cyan-900/30 text-cyan-500 border border-cyan-900/50 rounded">
+                            {isFilteredDriver ? 'Muted' : 'Solo'}
+                          </button>
                       </div>
                   }
                >
                   <WaveformTrack 
                       audioUrl={currentFile.url}
-                      waveColor="#06b6d4" // Cyan
+                      waveColor="#06b6d4"
                       progressColor="#cffafe"
-                      onLog={addLog}
                       onReady={(d) => setDuration(d)}
                       seekTo={seekTarget}
                       onSeek={handleSeek}
+                      isPlaying={isPlaying}
+                      volume={isFilteredDriver ? 0 : (isMuted ? 0 : volume)}
+                      onTimeUpdate={!isFilteredDriver ? handleTimeUpdate : undefined}
                   />
                </TrackRow>
 
@@ -312,6 +335,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       onRegionsLoaded={handleClinicalRegionsLoaded}
                       onClear={handleClearClinicalRegions}
                       currentLabelFile={currentLabelFile}
+                      currentTime={currentTime}
                   />
                </TrackRow>
 
@@ -332,7 +356,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                             className="bg-emerald-950/10"
                             controls={
                                 <div className="flex space-x-2">
-                                    <button className="px-2 py-0.5 text-[10px] bg-emerald-900/30 text-emerald-500 border border-emerald-900/50 rounded">Solo</button>
+                                    <button className="px-2 py-0.5 text-[10px] bg-emerald-900/30 text-emerald-500 border border-emerald-900/50 rounded">Active</button>
                                 </div>
                             }
                         >
@@ -345,11 +369,13 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                                 filteredAudioUrl && (
                                     <WaveformTrack 
                                         audioUrl={filteredAudioUrl}
-                                        waveColor="#22c55e" // Green
+                                        waveColor="#22c55e"
                                         progressColor="#86efac"
-                                        onLog={addLog}
                                         seekTo={seekTarget}
                                         onSeek={handleSeek}
+                                        isPlaying={isPlaying}
+                                        volume={isFilteredDriver ? (isMuted ? 0 : volume) : 0}
+                                        onTimeUpdate={isFilteredDriver ? handleTimeUpdate : undefined}
                                     />
                                 )
                             )}
@@ -366,7 +392,19 @@ export const CenterStage: React.FC<CenterStageProps> = ({
       </div>
 
       {/* 3. Controls & Logs */}
-      {currentFile && <MasterControls />}
+      {currentFile && (
+          <MasterControls 
+             isPlaying={isPlaying}
+             currentTime={currentTime}
+             duration={duration}
+             volume={volume}
+             isMuted={isMuted}
+             onTogglePlay={handleTogglePlay}
+             onSeek={handleSeek}
+             onVolumeChange={setVolume}
+             onToggleMute={() => setIsMuted(!isMuted)}
+          />
+      )}
       
       <div className="flex-shrink-0 bg-slate-900 border-t border-slate-800">
         <DebugLog logs={logs} />
