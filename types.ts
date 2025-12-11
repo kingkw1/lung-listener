@@ -25,6 +25,14 @@ export interface AIFilterConfig {
   Q: number;
 }
 
+export interface RegionData {
+  id: string;
+  start: number;
+  end: number;
+  content: string;
+  color: string;
+}
+
 export enum AnalysisStatus {
   IDLE = 'IDLE',
   ANALYZING = 'ANALYZING',

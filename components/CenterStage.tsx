@@ -1,585 +1,216 @@
 import React, { useRef, useState, useEffect, DragEvent } from 'react';
-import { UploadCloud, FileAudio, X, FileText, Tag, Eye, EyeOff, FileDown, Download } from 'lucide-react';
-import { AudioFile, AIFilterConfig, PatientContextData } from '../types';
-import { AudioPlayer } from './AudioPlayer';
+import { UploadCloud, FileAudio, X, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { AudioFile, AIFilterConfig, RegionData } from '../types';
 import { DebugLog } from './DebugLog';
+import { WaveformBubble } from './WaveformBubble';
+import { LabelControlZone } from './LabelControlZone';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// Imports from the import map
-import WaveSurfer from 'wavesurfer.js';
-import Spectrogram from 'wavesurfer.js/dist/plugins/spectrogram.esm.js';
-import Timeline from 'wavesurfer.js/dist/plugins/timeline.esm.js';
-import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 
 interface CenterStageProps {
   currentFile: AudioFile | null;
   setCurrentFile: React.Dispatch<React.SetStateAction<AudioFile | null>>;
   aiAnalysisOutput: string;
   aiFilterConfig: AIFilterConfig | null;
-  isFilterActive: boolean;
-  patientData: PatientContextData;
 }
 
-// --- SCIENTIFIC HELPER FUNCTIONS ---
+// Helper: Convert AudioBuffer to WAV Blob
+const bufferToWave = (abuffer: AudioBuffer, len: number) => {
+  let numOfChan = abuffer.numberOfChannels,
+      length = len * numOfChan * 2 + 44,
+      buffer = new ArrayBuffer(length),
+      view = new DataView(buffer),
+      channels = [], i, sample,
+      offset = 0,
+      pos = 0;
 
-// Generate a Plasma-like colormap (Blue -> Purple -> Red -> Yellow)
-const getPlasmaColormap = () => {
-    const colors = [];
-    for (let i = 0; i < 256; i++) {
-        const t = i / 255;
-        let r = 0, g = 0, b = 0;
+  // write WAVE header
+  setUint32(0x46464952);                         // "RIFF"
+  setUint32(length - 8);                         // file length - 8
+  setUint32(0x45564157);                         // "WAVE"
 
-        if (t < 0.25) {
-            // Blue -> Purple
-            const localT = t / 0.25;
-            r = Math.floor(128 * localT);
-            g = 0;
-            b = Math.floor(255 - (127 * localT));
-        } else if (t < 0.5) {
-            // Purple -> Red
-            const localT = (t - 0.25) / 0.25;
-            r = Math.floor(128 + (127 * localT));
-            g = 0;
-            b = Math.floor(128 - (128 * localT));
-        } else if (t < 0.75) {
-            // Red -> Orange
-            const localT = (t - 0.5) / 0.25;
-            r = 255;
-            g = Math.floor(165 * localT);
-            b = 0;
-        } else {
-            // Orange -> Yellow
-            const localT = (t - 0.75) / 0.25;
-            r = 255;
-            g = Math.floor(165 + (90 * localT));
-            b = 0;
-        }
-        colors.push([r / 255, g / 255, b / 255, 1]);
+  setUint32(0x20746d66);                         // "fmt " chunk
+  setUint32(16);                                 // length = 16
+  setUint16(1);                                  // PCM (uncompressed)
+  setUint16(numOfChan);
+  setUint32(abuffer.sampleRate);
+  setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+  setUint16(numOfChan * 2);                      // block-align
+  setUint16(16);                                 // 16-bit (hardcoded in this example)
+
+  setUint32(0x61746164);                         // "data" - chunk
+  setUint32(length - pos - 4);                   // chunk length
+
+  // write interleaved data
+  for(i = 0; i < abuffer.numberOfChannels; i++)
+    channels.push(abuffer.getChannelData(i));
+
+  while(pos < len) {
+    for(i = 0; i < numOfChan; i++) {             // interleave channels
+      sample = Math.max(-1, Math.min(1, channels[i][pos])); // clamp
+      sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; // scale to 16-bit signed int
+      view.setInt16(44 + offset, sample, true); // write 16-bit sample
+      offset += 2;
     }
-    return colors;
+    pos++;
+  }
+
+  return new Blob([buffer], {type: "audio/wav"});
+
+  function setUint16(data: number) {
+    view.setUint16(pos, data, true);
+    pos += 2;
+  }
+
+  function setUint32(data: number) {
+    view.setUint32(pos, data, true);
+    pos += 4;
+  }
 };
 
 export const CenterStage: React.FC<CenterStageProps> = ({ 
   currentFile, 
   setCurrentFile, 
   aiAnalysisOutput, 
-  aiFilterConfig, 
-  isFilterActive,
-  patientData
+  aiFilterConfig
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const labelInputRef = useRef<HTMLInputElement>(null);
 
-  // Single container ref for both Waveform and Spectrogram
-  const containerRef = useRef<HTMLDivElement>(null);
-  const wavesurferRef = useRef<WaveSurfer | null>(null);
-  const regionsPluginRef = useRef<any>(null); // Keep reference to regions plugin
-  
-  // Persistent AudioContext for Web Audio API features (Filters)
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-
-  // Audio State for the Player
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-
-  // Clinical Data State
+  // Region State
+  const [aiRegions, setAiRegions] = useState<RegionData[]>([]);
+  const [clinicalRegions, setClinicalRegions] = useState<RegionData[]>([]);
   const [hasLabels, setHasLabels] = useState(false);
+  const [currentLabelFile, setCurrentLabelFile] = useState<string | null>(null);
   const [showLabels, setShowLabels] = useState(true);
 
-  // Logging State
-  const [logs, setLogs] = useState<string[]>([]);
+  // Filter State
+  const [filteredAudioUrl, setFilteredAudioUrl] = useState<string | null>(null);
+  const [isProcessingFilter, setIsProcessingFilter] = useState(false);
 
+  // Logs
+  const [logs, setLogs] = useState<string[]>([]);
   const addLog = (msg: string) => {
     const timestamp = new Date().toISOString().split('T')[1].slice(0, 8);
     setLogs(prev => [...prev, `${timestamp}: ${msg}`]);
   };
 
-  // Initialize WaveSurfer when a file is present
+  // Reset when file changes
   useEffect(() => {
-    if (!currentFile) return;
+      setAiRegions([]);
+      setClinicalRegions([]);
+      setHasLabels(false);
+      setCurrentLabelFile(null);
+      setFilteredAudioUrl(null);
+      setLogs([]);
+      if(currentFile) addLog(`File loaded: ${currentFile.name}`);
+  }, [currentFile]);
 
-    // Reset UI State
-    setIsReady(false);
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setDuration(0);
-    setHasLabels(false);
-    mediaSourceRef.current = null; // Reset source ref
-    
-    addLog(`File loaded: ${currentFile.name} (${currentFile.type})`);
+  // --- OFFLINE AUDIO PROCESSING ---
+  const processOfflineAudio = async () => {
+      if (!currentFile || !aiFilterConfig) return;
+      
+      setIsProcessingFilter(true);
+      addLog(`Starting offline filter render: ${aiFilterConfig.type} @ ${aiFilterConfig.frequency}Hz`);
 
-    let ws: WaveSurfer | null = null;
-    let initTimer: number;
-
-    const initWaveSurfer = (attempt = 1) => {
       try {
-        // 1. Check if Ref is mounted
-        if (!containerRef.current) {
-          if (attempt <= 10) {
-             addLog(`Waiting for DOM container (Attempt ${attempt}/10)...`);
-             initTimer = window.setTimeout(() => initWaveSurfer(attempt + 1), 200);
-             return;
-          } else {
-             addLog("Error: DOM container failed to mount.");
-             return;
-          }
-        }
+          // 1. Load Original Audio
+          const response = await fetch(currentFile.url);
+          const arrayBuffer = await response.arrayBuffer();
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-        // 2. Check dimensions
-        const width = containerRef.current.clientWidth;
-        if (width === 0) {
-           if (attempt <= 20) {
-             addLog(`Container has 0 width, layout pending (Attempt ${attempt}/20)...`);
-             initTimer = window.setTimeout(() => initWaveSurfer(attempt + 1), 100);
-             return;
-           }
-        }
+          // 2. Setup Offline Context
+          const offlineCtx = new OfflineAudioContext(
+              audioBuffer.numberOfChannels,
+              audioBuffer.length,
+              audioBuffer.sampleRate
+          );
 
-        addLog(`Container ready. Width: ${width}px`);
+          // 3. Create Graph
+          const source = offlineCtx.createBufferSource();
+          source.buffer = audioBuffer;
 
-        // 3. Clean up existing instance
-        if (wavesurferRef.current) {
-          addLog("Destroying previous instance");
-          wavesurferRef.current.destroy();
-          wavesurferRef.current = null;
-        }
-        
-        // Ensure AudioContext
-        if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
+          const filter = offlineCtx.createBiquadFilter();
+          filter.type = aiFilterConfig.type;
+          filter.frequency.value = aiFilterConfig.frequency;
+          filter.Q.value = aiFilterConfig.Q;
 
-        addLog("Initializing WaveSurfer Engine...");
+          source.connect(filter);
+          filter.connect(offlineCtx.destination);
 
-        // Create Regions Plugin Instance
-        const wsRegions = RegionsPlugin.create();
-        regionsPluginRef.current = wsRegions;
+          // 4. Render
+          source.start();
+          const renderedBuffer = await offlineCtx.startRendering();
+          addLog("Filter render complete. Encoding WAV...");
 
-        // 4. Create Instance
-        // IMPORTANT: We share the audioContext but we DO NOT let WS create the source node implicitly for filters,
-        // we will manage the graph manually.
-        ws = WaveSurfer.create({
-          container: containerRef.current,
-          waveColor: '#06b6d4',      // Medical Cyan (default)
-          progressColor: '#cffafe',  // Bright Cyan for progress
-          cursorColor: '#ffffff',    // White cursor
-          cursorWidth: 2,
-          barWidth: 2,
-          barGap: 3,
-          height: 100,               // Waveform Height
-          normalize: true,
-          minPxPerSec: 50,
-          fillParent: true,
-          autoScroll: true,
-          // audioContext removed as it's not a valid property in WaveSurferOptions for v7
-          plugins: [
-            Spectrogram.create({
-              labels: true,
-              height: 160,           // Spectrogram Height
-              labelsColor: '#94a3b8',
-              labelsBackground: 'rgba(2, 6, 23, 0.9)',
-              frequencyMin: 0,
-              frequencyMax: 4000,    // Optimized for lung sounds
-              fftSamples: 1024,
-              colorMap: getPlasmaColormap(), 
-            }),
-            Timeline.create({
-              height: 20,
-              timeInterval: 1,
-              primaryLabelInterval: 5,
-              style: {
-                  fontSize: '10px',
-                  color: '#64748b',
-              }
-            }),
-            wsRegions
-          ],
-        });
-
-        // Load Audio
-        ws.load(currentFile.url);
-
-        // 5. Setup Listeners
-        ws.on('ready', () => {
-          addLog("Event: Ready. Signal processed.");
-          setIsReady(true);
-          setDuration(ws!.getDuration());
-          ws!.setVolume(isMuted ? 0 : volume);
-
-          // --- CSS HACK FOR FULL HEIGHT CURSOR & REGIONS ---
-          const wrapper = ws!.getWrapper();
-          if (wrapper) {
-             wrapper.style.overflow = 'visible';
-             wrapper.style.zIndex = '10'; 
-             
-             const styleId = 'wavesurfer-overrides';
-             if (!document.getElementById(styleId)) {
-                 const style = document.createElement('style');
-                 style.id = styleId;
-                 style.innerHTML = `
-                    /* Force cursor to span full height */
-                    #viz-container ::part(cursor) {
-                        height: 300px !important;
-                        top: 0 !important;
-                        background-color: rgba(255, 255, 255, 0.8) !important;
-                    }
-                    #viz-container .wavesurfer-cursor {
-                        height: 300px !important; 
-                        top: 0 !important;
-                    }
-
-                    /* Force regions to span full height and look nice */
-                    #viz-container ::part(region) {
-                        height: 300px !important;
-                        top: 0 !important;
-                        z-index: 4 !important; /* Above spectro, below cursor */
-                        border-left: 1px solid rgba(255,255,255,0.4);
-                        border-right: 1px solid rgba(255,255,255,0.4);
-                    }
-                    #viz-container .wavesurfer-region {
-                        height: 300px !important;
-                        top: 0 !important;
-                        z-index: 4 !important;
-                        border-left: 1px solid rgba(255,255,255,0.4);
-                        border-right: 1px solid rgba(255,255,255,0.4);
-                    }
-                    
-                    /* Region Labels */
-                    #viz-container ::part(region-content) {
-                        color: white;
-                        font-family: monospace;
-                        font-size: 10px;
-                        padding: 4px;
-                        text-transform: uppercase;
-                        letter-spacing: 1px;
-                        background: rgba(0,0,0,0.5);
-                    }
-                 `;
-                 document.head.appendChild(style);
-             }
-          }
-        });
-
-        ws.on('timeupdate', (time) => setCurrentTime(time));
-        ws.on('finish', () => setIsPlaying(false));
-        ws.on('error', (err) => addLog(`WaveSurfer Error: ${err}`));
-        
-        wavesurferRef.current = ws;
+          // 5. Convert to Blob
+          const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
+          const wavUrl = URL.createObjectURL(wavBlob);
+          
+          setFilteredAudioUrl(wavUrl);
+          addLog("Filtered audio ready.");
 
       } catch (error: any) {
-        addLog(`CRITICAL INITIALIZATION ERROR: ${error.message}`);
-        console.error(error);
+          addLog(`Filter Processing Error: ${error.message}`);
+          console.error(error);
+      } finally {
+          setIsProcessingFilter(false);
       }
-    };
+  };
 
-    initWaveSurfer(1);
-
-    return () => {
-      window.clearTimeout(initTimer);
-      if (ws) {
-        ws.destroy();
-      }
-      wavesurferRef.current = null;
-      regionsPluginRef.current = null;
-      // Note: We don't close AudioContext to allow reuse
-    };
-  }, [currentFile]); 
-
-  // --- AI FILTER APPLICATION (MANUAL WEB AUDIO GRAPH) ---
-
+  // Automatically process filter when config arrives
   useEffect(() => {
-    const ws = wavesurferRef.current;
-    // We wait for WS to be ready and for the AC to exist
-    if (!ws || !isReady || !audioContextRef.current) return;
-
-    const ac = audioContextRef.current;
-    const mediaElement = ws.getMediaElement();
-    
-    if (!mediaElement) return;
-
-    // 1. Initialize Singleton Source Node
-    // We only create this once per MediaElement to avoid InvalidStateError
-    if (!mediaSourceRef.current) {
-        try {
-            mediaSourceRef.current = ac.createMediaElementSource(mediaElement);
-        } catch (e) {
-            addLog(`Audio Graph Warning: Could not create source. It might already exist. ${e}`);
-            // If we can't get the source, we can't filter.
-            return;
-        }
-    }
-
-    const source = mediaSourceRef.current;
-
-    // 2. Reset Graph: Disconnect everything first
-    try {
-        source.disconnect();
-    } catch (e) {
-        // Ignore disconnection errors
-    }
-
-    // 3. Apply Filter if Active
-    if (isFilterActive && aiFilterConfig) {
-        addLog(`Applying AI Filter: ${aiFilterConfig.type} @ ${aiFilterConfig.frequency}Hz`);
-        
-        // Create Filter Node
-        const filter = ac.createBiquadFilter();
-        filter.type = aiFilterConfig.type;
-        filter.frequency.value = aiFilterConfig.frequency;
-        filter.Q.value = aiFilterConfig.Q;
-        
-        // Connect: Source -> Filter -> Destination
-        source.connect(filter);
-        filter.connect(ac.destination);
-        
-        // Visual Feedback: Green
-        ws.setOptions({
-            waveColor: '#22c55e', 
-            progressColor: '#4ade80'
-        });
+    if (aiFilterConfig && currentFile) {
+        processOfflineAudio();
     } else {
-        // Connect: Source -> Destination (Direct)
-        source.connect(ac.destination);
-        
-        // Visual Feedback: Cyan (Default)
-        ws.setOptions({
-            waveColor: '#06b6d4', 
-            progressColor: '#cffafe'
-        });
+        setFilteredAudioUrl(null);
     }
-
-  }, [isFilterActive, aiFilterConfig, isReady]);
-
-
-  // --- REGION / LABELS HANDLING ---
-
-  useEffect(() => {
-    // Toggle visibility of existing regions
-    if (regionsPluginRef.current) {
-        const regions = regionsPluginRef.current.getRegions();
-        regions.forEach((r: any) => {
-             if (r.element) {
-                 r.element.style.display = showLabels ? 'block' : 'none';
-             }
-        });
-    }
-  }, [showLabels, hasLabels]); // Trigger when toggle changes or when we flag that we have labels
+  }, [aiFilterConfig]);
 
   // --- AI REGION PARSING ---
-  
   useEffect(() => {
-    if (!aiAnalysisOutput || !regionsPluginRef.current) return;
-
-    // Regex to find timestamps: e.g. "0:02 - 0:05" or "1:15 - 1:20"
+    if (!aiAnalysisOutput) return;
     const regex = /(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/g;
-    
     let match;
-    const existingRegions = regionsPluginRef.current.getRegions();
+    const newRegions: RegionData[] = [];
 
     while ((match = regex.exec(aiAnalysisOutput)) !== null) {
-        const startMin = parseInt(match[1]);
-        const startSec = parseInt(match[2]);
-        const endMin = parseInt(match[3]);
-        const endSec = parseInt(match[4]);
-
-        const start = startMin * 60 + startSec;
-        const end = endMin * 60 + endSec;
-
-        // Generate a deterministic ID for this time range
-        const regionId = `ai-region-${start}-${end}`;
-
-        const alreadyExists = existingRegions.some((r: any) => r.id === regionId);
-
-        if (!alreadyExists) {
-            addLog(`AI Detection found: ${match[0]} (${start}s - ${end}s)`);
-            const newRegion = regionsPluginRef.current.addRegion({
-                id: regionId,
+        const start = parseInt(match[1]) * 60 + parseInt(match[2]);
+        const end = parseInt(match[3]) * 60 + parseInt(match[4]);
+        const id = `ai-region-${start}-${end}`;
+        
+        if (!newRegions.find(r => r.id === id) && !aiRegions.find(r => r.id === id)) {
+            newRegions.push({
+                id,
                 start,
                 end,
                 content: 'AI Diagnosis',
-                color: 'rgba(168, 85, 247, 0.4)', // Purple
-                drag: false,
-                resize: false,
+                color: 'rgba(168, 85, 247, 0.4)'
             });
-            
-            // Immediately apply current visibility preference
-            if (newRegion.element) {
-                newRegion.element.style.display = showLabels ? 'block' : 'none';
-            }
-
-            // Ensure we know we have labels now
-            if (!hasLabels) setHasLabels(true);
         }
     }
 
-  }, [aiAnalysisOutput, hasLabels, showLabels]);
-
-
-  const handleLabelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      addLog(`Reading labels file: ${file.name}`);
-      const reader = new FileReader();
-      
-      reader.onload = (event) => {
-          const text = event.target?.result as string;
-          if (!text || !regionsPluginRef.current) return;
-
-          addLog("Parsing ICBHI clinical data...");
-          
-          regionsPluginRef.current.clearRegions(); 
-
-          const lines = text.split('\n');
-          let count = 0;
-
-          lines.forEach((line, idx) => {
-              if (!line.trim()) return;
-              // Format: Start \t End \t Crackles \t Wheezes
-              const parts = line.split('\t').map(s => s.trim());
-              if (parts.length < 4) return;
-
-              const start = parseFloat(parts[0]);
-              const end = parseFloat(parts[1]);
-              const crackles = parseInt(parts[2]);
-              const wheezes = parseInt(parts[3]);
-
-              if (isNaN(start) || isNaN(end)) return;
-
-              // Generate IDs for clinical labels too
-              const idBase = `clinical-${idx}-${start}-${end}`;
-
-              if (wheezes === 1) {
-                  regionsPluginRef.current.addRegion({
-                      id: `${idBase}-wheeze`,
-                      start,
-                      end,
-                      content: 'Wheeze',
-                      color: 'rgba(239, 68, 68, 0.3)', // Red
-                      drag: false,
-                      resize: false,
-                  });
-                  count++;
-              }
-              if (crackles === 1) {
-                  regionsPluginRef.current.addRegion({
-                      id: `${idBase}-crackle`,
-                      start,
-                      end,
-                      content: 'Crackle',
-                      color: 'rgba(234, 179, 8, 0.3)', // Yellow
-                      drag: false,
-                      resize: false,
-                  });
-                  count++;
-              }
-          });
-
-          addLog(`Imported ${count} clinical regions.`);
-          setHasLabels(true);
-          setShowLabels(true);
-      };
-
-      reader.readAsText(file);
-      // Reset input
-      e.target.value = '';
-  };
-
-  // --- REPORT GENERATION ---
-
-  const handleDownloadReport = () => {
-    if (!currentFile || !aiAnalysisOutput) return;
-
-    const timestamp = new Date().toLocaleString();
-    
-    // Clean up analysis text (remove JSON raw block if present)
-    let cleanAnalysis = aiAnalysisOutput.replace(/\{"recommendedFilter":\s*\{[\s\S]*?\}\}/, '');
-    
-    const reportContent = `
-# CLINICAL AUDIO ANALYSIS REPORT
-Generated by Lung Listener (DeepMind Health)
-Date: ${timestamp}
-
-## PATIENT CONTEXT
-- **Patient ID:** ${patientData.id || 'N/A'}
-- **Recording Location:** ${patientData.location}
-- **File Name:** ${currentFile.name}
-- **Duration:** ${duration.toFixed(2)}s
-
----
-
-## AI DIAGNOSTIC FINDINGS (GEMINI 3 PRO)
-${cleanAnalysis}
-
----
-
-## RESEARCH TOOL: AUDIO FILTER CONFIGURATION
-${aiFilterConfig ? `
-- **Filter Type:** ${aiFilterConfig.type}
-- **Cutoff Frequency:** ${aiFilterConfig.frequency} Hz
-- **Q Factor:** ${aiFilterConfig.Q}
-` : 'No filter configuration generated.'}
-
----
-
-## DISCLAIMER
-This report is generated by an AI system for research purposes only. 
-It is NOT a medical diagnosis. All findings must be verified by a qualified physician.
-    `.trim();
-
-    const blob = new Blob([reportContent], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Patient_${patientData.id || 'Unknown'}_Report.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    addLog("Report downloaded successfully.");
-  };
-
-
-  // --- AUDIO CONTROLS ---
-
-  const handleTogglePlay = () => {
-    if (wavesurferRef.current && isReady) {
-      if (isPlaying) {
-          wavesurferRef.current.pause();
-          setIsPlaying(false);
-      } else {
-          wavesurferRef.current.play();
-          setIsPlaying(true);
-      }
+    if (newRegions.length > 0) {
+        setAiRegions(prev => [...prev, ...newRegions]);
+        setHasLabels(true);
     }
+  }, [aiAnalysisOutput]);
+
+  // --- HANDLERS ---
+  const handleClinicalRegionsLoaded = (regions: RegionData[], fileName: string) => {
+      setClinicalRegions(regions);
+      setCurrentLabelFile(fileName);
+      setHasLabels(true);
+      setShowLabels(true);
+      addLog(`Loaded ${regions.length} labels from ${fileName}`);
   };
 
-  const handleSeek = (time: number) => {
-    if (wavesurferRef.current && isReady) {
-      wavesurferRef.current.setTime(time);
-    }
-  };
-
-  const handleVolumeChange = (newVol: number) => {
-    setVolume(newVol);
-    if (wavesurferRef.current && !isMuted) {
-      wavesurferRef.current.setVolume(newVol);
-    }
-  };
-
-  const handleToggleMute = () => {
-    const newMuteState = !isMuted;
-    setIsMuted(newMuteState);
-    if (wavesurferRef.current) {
-      wavesurferRef.current.setVolume(newMuteState ? 0 : volume);
-    }
+  const handleClearClinicalRegions = () => {
+      setClinicalRegions([]);
+      setCurrentLabelFile(null);
+      // Only set hasLabels to false if AI regions are also empty
+      if (aiRegions.length === 0) setHasLabels(false);
+      addLog('Clinical labels cleared.');
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -587,34 +218,22 @@ It is NOT a medical diagnosis. All findings must be verified by a qualified phys
     setIsDragging(true);
   };
 
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files.length > 0) {
-        processFiles(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files.length > 0) processFiles(e.dataTransfer.files);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      processFiles(e.target.files);
-    }
+    if (e.target.files) processFiles(e.target.files);
   };
 
   const processFiles = (files: FileList) => {
     const file = files[0];
-    // Basic check for audio
     if (!file.type.startsWith('audio/') && !file.name.endsWith('.wav')) {
         addLog(`Error: Invalid file type ${file.type}`);
         return;
     }
-    
-    addLog(`Processing file: ${file.name}`);
     const url = URL.createObjectURL(file);
     setCurrentFile({
       name: file.name,
@@ -626,85 +245,28 @@ It is NOT a medical diagnosis. All findings must be verified by a qualified phys
   };
 
   const clearFile = () => {
-    addLog("Clearing file");
-    if (currentFile) {
-      URL.revokeObjectURL(currentFile.url);
-    }
+    if (currentFile) URL.revokeObjectURL(currentFile.url);
+    if (filteredAudioUrl) URL.revokeObjectURL(filteredAudioUrl);
     setCurrentFile(null);
-    setIsReady(false);
-    setLogs([]); 
-    setHasLabels(false);
   };
 
   return (
     <div className="flex flex-col h-full relative">
-      
       {/* Header */}
-      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950/80 backdrop-blur z-20">
+      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur z-20">
         <div className="flex items-center space-x-6">
             <h2 className="text-slate-200 font-medium">Signal Lab</h2>
-            
-            {/* Clinical Labels Control Group */}
-            {currentFile && isReady && (
+            {currentFile && hasLabels && (
                 <div className="flex items-center space-x-3 pl-6 border-l border-slate-800">
-                    <input 
-                        type="file" 
-                        ref={labelInputRef} 
-                        className="hidden" 
-                        accept=".txt"
-                        onChange={handleLabelImport}
-                    />
-                    <button 
-                        onClick={() => labelInputRef.current?.click()}
-                        className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors border border-slate-700"
-                        title="Import ICBHI .txt file"
-                    >
-                        <FileText size={14} />
-                        <span>Import Labels</span>
+                    <button onClick={() => setShowLabels(!showLabels)} className={`flex items-center space-x-2 px-3 py-1.5 text-xs rounded border ${showLabels ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
+                        {showLabels ? <Eye size={14} /> : <EyeOff size={14} />}<span>{showLabels ? 'Labels Visible' : 'Labels Hidden'}</span>
                     </button>
-
-                    {hasLabels && (
-                        <button 
-                            onClick={() => setShowLabels(!showLabels)}
-                            className={`flex items-center space-x-2 px-3 py-1.5 text-xs rounded transition-colors border ${
-                                showLabels 
-                                ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' 
-                                : 'bg-slate-900 border-slate-800 text-slate-500'
-                            }`}
-                        >
-                            {showLabels ? <Eye size={14} /> : <EyeOff size={14} />}
-                            <span>{showLabels ? 'Labels Visible' : 'Labels Hidden'}</span>
-                        </button>
-                    )}
                 </div>
             )}
         </div>
-
-        <div className="flex items-center space-x-4">
-          {/* REPORT EXPORT BUTTON */}
-          <button
-            onClick={handleDownloadReport}
-            disabled={!aiAnalysisOutput}
-            className={`flex items-center space-x-2 px-4 py-2 rounded text-sm font-medium transition-all
-                ${aiAnalysisOutput 
-                    ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow shadow-cyan-900/40' 
-                    : 'bg-slate-800 text-slate-600 cursor-not-allowed'}
-            `}
-          >
-             <Download size={16} />
-             <span>Download Report</span>
-          </button>
-
-          <div className="h-6 w-px bg-slate-800 mx-2"></div>
-
-          <div className="flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full transition-colors duration-300 ${isReady ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'bg-slate-700'}`}></span>
-            <span className="text-xs text-slate-500 uppercase tracking-wider">{currentFile ? (isReady ? 'Analysis Ready' : 'Loading Signal...') : 'Awaiting Signal'}</span>
-          </div>
-        </div>
       </header>
 
-      {/* Workspace */}
+      {/* Main Workspace */}
       <div className="flex-1 relative p-6 flex flex-col space-y-4 overflow-hidden bg-slate-950">
         <AnimatePresence mode="wait">
           {!currentFile && (
@@ -713,26 +275,16 @@ It is NOT a medical diagnosis. All findings must be verified by a qualified phys
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className={`flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all duration-300 cursor-pointer
-                ${isDragging ? 'border-cyan-500 bg-cyan-900/10' : 'border-slate-700 bg-slate-900/30 hover:bg-slate-900/50 hover:border-slate-600'}
-              `}
+              className={`flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all duration-300 cursor-pointer ${isDragging ? 'border-cyan-500 bg-cyan-900/10' : 'border-slate-700 bg-slate-900/30 hover:bg-slate-900/50 hover:border-slate-600'}`}
               onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
+              onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="audio/*,.wav,.mp3"
-                onChange={handleFileInput}
-              />
-              <div className="p-4 rounded-full bg-slate-800 mb-4 text-cyan-400">
-                <UploadCloud size={48} />
-              </div>
+              <input type="file" ref={fileInputRef} className="hidden" accept="audio/*,.wav,.mp3" onChange={handleFileInput} />
+              <div className="p-4 rounded-full bg-slate-800 mb-4 text-cyan-400"><UploadCloud size={48} /></div>
               <h3 className="text-lg font-medium text-slate-200 mb-2">Drag respiratory audio here</h3>
-              <p className="text-slate-500 text-sm">Supports .WAV, .MP3 (Max 50MB)</p>
+              <p className="text-slate-500 text-sm">Supports .WAV, .MP3</p>
             </motion.div>
           )}
 
@@ -742,77 +294,88 @@ It is NOT a medical diagnosis. All findings must be verified by a qualified phys
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className="flex-1 flex flex-col h-full overflow-hidden"
+              className="flex-1 flex flex-col h-full overflow-hidden space-y-2"
             >
-              {/* File Info */}
-              <div className="flex-shrink-0 flex items-center justify-between bg-slate-800/50 px-4 py-3 rounded-lg border border-slate-700 mb-4">
-                <div className="flex items-center space-x-3">
-                  <FileAudio className="text-cyan-400" size={20} />
-                  <div>
-                    <div className="text-sm font-medium text-slate-200">{currentFile.name}</div>
-                    <div className="text-xs text-slate-500">{(currentFile.size / 1024 / 1024).toFixed(2)} MB • {(duration).toFixed(1)}s</div>
+              {/* File Info Bubble */}
+              <div className="flex-shrink-0 flex items-center justify-between p-3 bg-slate-800/40 border border-slate-700/50 rounded-lg backdrop-blur-sm">
+                  <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-cyan-950/50 border border-cyan-900/50 rounded text-cyan-400">
+                          <FileAudio size={18} />
+                      </div>
+                      <div>
+                          <p className="text-sm font-medium text-slate-200">{currentFile.name}</p>
+                          <p className="text-xs text-slate-500">{(currentFile.size / 1024 / 1024).toFixed(2)} MB • WAV Audio</p>
+                      </div>
                   </div>
-                </div>
-                <button 
-                  onClick={clearFile}
-                  className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-red-400 transition-colors"
-                >
-                  <X size={16} />
-                </button>
+                  <button 
+                      onClick={clearFile}
+                      className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-700/50 rounded transition-colors"
+                      title="Remove file"
+                  >
+                      <X size={18} />
+                  </button>
               </div>
 
-              {/* Combined Visualization Container */}
-              <div className={`flex-1 bg-slate-900 rounded-lg border ${isFilterActive ? 'border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]' : 'border-slate-800'} transition-all duration-500 relative overflow-hidden flex flex-col`}>
-                  {/* Title Overlays */}
-                  <div className="absolute top-2 left-2 z-20 pointer-events-none">
-                     <span className={`bg-slate-950/80 border border-slate-800 text-[10px] px-2 py-0.5 rounded font-mono ${isFilterActive ? 'text-green-400' : 'text-cyan-500'}`}>AMPLITUDE {isFilterActive ? '(FILTERED)' : ''}</span>
-                  </div>
-                  <div className="absolute top-[110px] left-2 z-20 pointer-events-none">
-                     <span className="bg-slate-950/80 border border-slate-800 text-amber-500 text-[10px] px-2 py-0.5 rounded font-mono" title="Visualizes frequency intensity over time">SPECTROGRAM (0-4kHz)</span>
-                  </div>
-                  
-                  {/* Legend Overlay */}
-                  {hasLabels && showLabels && (
-                    <div className="absolute top-2 right-2 z-20 pointer-events-none flex flex-col items-end space-y-1">
-                        <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded">
-                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                            <span className="text-[10px] text-slate-300">WHEEZE</span>
-                        </div>
-                        <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded">
-                            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                            <span className="text-[10px] text-slate-300">CRACKLE</span>
-                        </div>
-                        <div className="flex items-center space-x-2 bg-slate-950/80 border border-slate-800 px-2 py-1 rounded">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                            <span className="text-[10px] text-slate-300">AI DIAGNOSIS</span>
-                        </div>
-                    </div>
-                  )}
-
-                  {/* The Main Container */}
-                  <div id="viz-container" ref={containerRef} className="w-full h-full relative" />
+              {/* Bubble 1: Raw Signal */}
+              <div className="flex-1 min-h-0 flex flex-col">
+                  <WaveformBubble 
+                      audioUrl={currentFile.url}
+                      title="Raw Signal Lab"
+                      waveColor="#06b6d4"
+                      progressColor="#cffafe"
+                      regions={[...aiRegions, ...clinicalRegions]}
+                      showLabels={showLabels}
+                      onLog={addLog}
+                      height={90}
+                  />
               </div>
+
+              {/* Middle Bubble: Label Import Zone */}
+              <div className="flex-shrink-0">
+                  <LabelControlZone 
+                      onRegionsLoaded={handleClinicalRegionsLoaded}
+                      onClear={handleClearClinicalRegions}
+                      hasLabels={clinicalRegions.length > 0}
+                      currentLabelFile={currentLabelFile}
+                  />
+              </div>
+
+              {/* Bubble 2: Filtered Signal (Auto-appears) */}
+              {(filteredAudioUrl || isProcessingFilter) && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="flex-1 min-h-0 flex flex-col border-t border-slate-800 pt-2"
+                  >
+                      {isProcessingFilter ? (
+                          <div className="flex-1 flex items-center justify-center bg-slate-900/50 rounded-lg border border-slate-800 border-dashed">
+                              <div className="flex flex-col items-center space-y-2 text-cyan-500 animate-pulse">
+                                  <Loader2 size={24} className="animate-spin" />
+                                  <span className="text-xs font-mono tracking-wide uppercase">Applying AI Filter...</span>
+                              </div>
+                          </div>
+                      ) : (
+                          filteredAudioUrl && (
+                            <WaveformBubble 
+                                audioUrl={filteredAudioUrl}
+                                title="AI Cleaned Signal (Gemini Filter Applied)"
+                                waveColor="#22c55e"
+                                progressColor="#86efac"
+                                regions={aiRegions} // Show AI regions but not clinical
+                                showLabels={showLabels}
+                                onLog={addLog}
+                                height={90}
+                            />
+                          )
+                      )}
+                  </motion.div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Bottom Controls */}
       <div className="flex-shrink-0 bg-slate-900 border-t border-slate-800 z-20">
-        <div className="h-24 p-4">
-            <AudioPlayer 
-                disabled={!isReady}
-                isPlaying={isPlaying}
-                currentTime={currentTime}
-                duration={duration}
-                volume={volume}
-                isMuted={isMuted}
-                onTogglePlay={handleTogglePlay}
-                onSeek={handleSeek}
-                onVolumeChange={handleVolumeChange}
-                onToggleMute={handleToggleMute}
-            />
-        </div>
         <DebugLog logs={logs} />
       </div>
     </div>

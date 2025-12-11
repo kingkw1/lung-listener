@@ -18,13 +18,13 @@ const App: React.FC = () => {
 
   // Shared state for AI Filter
   const [aiFilterConfig, setAiFilterConfig] = useState<AIFilterConfig | null>(null);
-  const [isFilterActive, setIsFilterActive] = useState(false);
+  const [isFilterActive, setIsFilterActive] = useState(false); // Used locally in CenterStage usually, but state kept here just in case
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
       {/* 3-Column Layout */}
       
-      {/* Left Sidebar: 20% width on large screens */}
+      {/* Left Sidebar: Fixed width */}
       <aside className="w-80 flex-shrink-0 border-r border-slate-800 bg-slate-900/50 backdrop-blur-sm z-20">
         <Sidebar 
           patientData={patientData} 
@@ -39,22 +39,22 @@ const App: React.FC = () => {
           setCurrentFile={setCurrentFile}
           aiAnalysisOutput={aiAnalysisOutput}
           aiFilterConfig={aiFilterConfig}
-          isFilterActive={isFilterActive}
-          patientData={patientData}
         />
       </main>
 
-      {/* Right Panel: 25% width or fixed */}
-      <aside className="w-96 flex-shrink-0 border-l border-slate-800 bg-slate-900/50 backdrop-blur-sm z-20">
+      {/* Right Panel: Wider width (approx 50% wider than previous w-96) */}
+      <aside className="w-[600px] flex-shrink-0 border-l border-slate-800 bg-slate-900/50 backdrop-blur-sm z-20 transition-all duration-300">
         <RightPanel 
           currentFile={currentFile}
           analysisStatus={analysisStatus}
           setAnalysisStatus={setAnalysisStatus}
+          aiAnalysisOutput={aiAnalysisOutput}
           setAiAnalysisOutput={setAiAnalysisOutput}
           setAiFilterConfig={setAiFilterConfig}
           isFilterActive={isFilterActive}
           setIsFilterActive={setIsFilterActive}
           aiFilterConfig={aiFilterConfig}
+          patientData={patientData}
         />
       </aside>
     </div>
