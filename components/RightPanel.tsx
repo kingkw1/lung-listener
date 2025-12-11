@@ -2,14 +2,9 @@ import React, { useState } from 'react';
 import { Sparkles, Activity, AlertTriangle, CheckCircle2, ChevronRight, BrainCircuit, Loader2, Copy, Check, Terminal, FileCode, Sliders, ToggleLeft, ToggleRight, Download } from 'lucide-react';
 import { AudioFile, AnalysisStatus, AIFilterConfig, PatientContextData } from '../types';
 import { motion } from 'framer-motion';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // --- AI INFRASTRUCTURE SETUP ---
-
-// Initialize the Google GenAI Client
-const ai = new GoogleGenAI({ 
-  apiKey: process.env.API_KEY
-});
 
 /**
  * Helper: Convert a File or Blob object to a Google GenAI compatible inlineData part.
@@ -138,6 +133,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   const handleDeepAnalysis = async () => {
     if (!currentFile) return;
     
+    // Initialize Stable AI client
+    const genAI = new GoogleGenerativeAI(process.env.API_KEY || '');
+
     setAnalysisStatus(AnalysisStatus.ANALYZING);
     setProgressMessage("Securely uploading buffer...");
     setMessages([]); // Clear previous analysis
@@ -153,10 +151,9 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         // 2. Convert to GenAI Format
         const audioPart = await fileToGenerativePart(blob);
         
-        setProgressMessage("Gemini 3 Pro is reasoning...");
+        setProgressMessage("Gemini 1.5 Pro is reasoning...");
 
         // 3. Construct System Prompt & User Prompt
-        // UPDATED: Added Section 4 for Python Code and Section 5 for JSON Filter Params
         const systemInstruction = `You are an expert Pulmonologist. Analyze this audio waveform.
 1. Quality Check: Briefly assess signal-to-noise ratio.
 2. Timeline Analysis: You MUST provide specific timestamps (e.g., '0:02 - 0:05') for the most distinct anomalies. If a sound is continuous, mark the start and end of the most intense segment.
@@ -166,39 +163,34 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         
         const userPrompt = "Analyze this audio. Locate the exact start/end time of the clearest Wheeze or Crackle.";
 
-        // 4. Initialize Stream
-        const result = await ai.models.generateContentStream({
-            model: 'gemini-3-pro-preview',
-            config: {
-                systemInstruction: systemInstruction,
-            },
-            contents: [
-                {
-                    parts: [
-                        audioPart,
-                        { text: userPrompt }
-                    ]
-                }
-            ]
+        // 4. Initialize Model
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-pro",
+            systemInstruction: systemInstruction 
         });
+
+        // 5. Generate Stream
+        const result = await model.generateContentStream([
+            audioPart,
+            userPrompt
+        ]);
 
         setProgressMessage("Receiving diagnostic stream...");
 
-        // 5. Process Stream
+        // 6. Process Stream
         let fullResponse = "";
         
         // Initialize the message in UI
         setMessages([{ role: 'assistant', content: '' }]);
 
-        for await (const chunk of result) {
-            const chunkText = chunk.text;
+        for await (const chunk of result.stream) {
+            const chunkText = chunk.text();
             if (chunkText) {
                 fullResponse += chunkText;
                 setMessages([{ role: 'assistant', content: fullResponse }]);
                 setAiAnalysisOutput(fullResponse); // Update shared state for visualization
 
                 // Attempt to parse JSON filter config from the accumulating tail
-                // We utilize a fairly permissive regex to catch the JSON object even if it has extra whitespace
                 const jsonRegex = /\{"recommendedFilter":\s*\{[\s\S]*?\}\}/;
                 const match = fullResponse.match(jsonRegex);
                 if (match) {
@@ -243,7 +235,7 @@ Date: ${timestamp}
 
 ---
 
-## AI DIAGNOSTIC FINDINGS (GEMINI 3 PRO)
+## AI DIAGNOSTIC FINDINGS (GEMINI 1.5 PRO)
 ${cleanAnalysis}
 
 ---
@@ -275,7 +267,7 @@ ${aiFilterConfig ? `
         <div>
           <div className="flex items-center space-x-2 text-cyan-400 mb-1">
               <Sparkles size={18} />
-              <h2 className="text-sm font-bold uppercase tracking-wider">Gemini 3 Pro Analysis</h2>
+              <h2 className="text-sm font-bold uppercase tracking-wider">Gemini 1.5 Pro Analysis</h2>
           </div>
           <p className="text-xs text-slate-500">Multimodal Diagnostic Engine</p>
         </div>

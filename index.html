@@ -6,6 +6,13 @@
     <title>The Lung Listener</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Shim process.env for browser environment
+      window.process = {
+        env: {
+          API_KEY: '' // This will be populated by the preview environment if available
+        }
+      };
+
       tailwind.config = {
         theme: {
           extend: {
@@ -49,17 +56,19 @@
   <script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "framer-motion": "https://aistudiocdn.com/framer-motion@^12.23.25",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "react": "https://esm.sh/react@18.3.1",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "framer-motion": "https://esm.sh/framer-motion@10.18.0?deps=react@18.3.1,react-dom@18.3.1",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0?deps=react@18.3.1,react-dom@18.3.1",
     "wavesurfer.js": "https://esm.sh/wavesurfer.js@7.8.1",
     "wavesurfer.js/dist/plugins/spectrogram.esm.js": "https://esm.sh/wavesurfer.js@7.8.1/dist/plugins/spectrogram.esm.js",
     "wavesurfer.js/dist/plugins/timeline.esm.js": "https://esm.sh/wavesurfer.js@7.8.1/dist/plugins/timeline.esm.js",
     "wavesurfer.js/dist/plugins/regions.esm.js": "https://esm.sh/wavesurfer.js@7.8.1/dist/plugins/regions.esm.js",
-    "wavesurfer.js/": "https://aistudiocdn.com/wavesurfer.js@^7.12.1/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.32.0"
+    "@google/generative-ai": "https://esm.run/@google/generative-ai",
+    "wavesurfer.js/": "https://esm.sh/wavesurfer.js@^7.12.1/"
   }
 }
 </script>
