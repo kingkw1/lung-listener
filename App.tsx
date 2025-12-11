@@ -16,11 +16,9 @@ const parseICBHIMetadata = (fileName: string): Partial<PatientContextData> | nul
   // Basic validation: ICBHI filenames usually have 5 parts
   if (parts.length < 5) return null;
 
-  const patientId = parts[0];
-  const locationCode = parts[2];
-  const equipment = parts[4];
+  const [patientId, index, locCode, modeCode, equipCode] = parts;
 
-  // Map Code to RecordingLocation Enum
+  // 1. Map Location Codes
   const locationMap: Record<string, string> = {
     'Tc': RecordingLocation.TRACHEA,
     'Al': RecordingLocation.ANTERIOR_LEFT,
@@ -30,15 +28,29 @@ const parseICBHIMetadata = (fileName: string): Partial<PatientContextData> | nul
     'Ll': RecordingLocation.LATERAL_LEFT,
     'Lr': RecordingLocation.LATERAL_RIGHT,
   };
+  const location = locationMap[locCode] || 'Unknown';
 
-  // If code is valid, use it; otherwise default to existing or 'Unknown' logic
-  const location = locationMap[locationCode];
+  // 2. Map Acquisition Mode
+  const modeMap: Record<string, string> = {
+    'sc': 'Single Channel',
+    'mc': 'Multichannel'
+  };
+  const mode = modeMap[modeCode] || 'Unknown';
 
-  if (!location) return null; // If strictly following standard, we only auto-fill if we recognize the location code
+  // 3. Map Equipment Codes
+  const equipMap: Record<string, string> = {
+    'AKGC417L': 'AKG C417L Microphone',
+    'LittC2SE': 'Littmann Classic II SE',
+    'Litt3200': 'Littmann 3200 Electronic',
+    'Meditron': 'WelchAllyn Meditron Master Elite'
+  };
+  const equipment = equipMap[equipCode] || equipCode; // Fallback to raw code if unknown
 
   return {
     id: patientId,
+    index: index,
     location: location,
+    mode: mode,
     equipment: equipment
   };
 };
@@ -46,7 +58,9 @@ const parseICBHIMetadata = (fileName: string): Partial<PatientContextData> | nul
 const App: React.FC = () => {
   const [patientData, setPatientData] = useState<PatientContextData>({
     id: '',
+    index: '',
     location: 'Trachea',
+    mode: 'Single Channel',
     equipment: ''
   });
   
@@ -58,7 +72,7 @@ const App: React.FC = () => {
 
   // Shared state for AI Filter
   const [aiFilterConfig, setAiFilterConfig] = useState<AIFilterConfig | null>(null);
-  const [isFilterActive, setIsFilterActive] = useState(false); // Used locally in CenterStage usually, but state kept here just in case
+  const [isFilterActive, setIsFilterActive] = useState(false);
 
   // --- EFFECT: AUTO-FILL METADATA ---
   useEffect(() => {
@@ -68,7 +82,9 @@ const App: React.FC = () => {
         setPatientData(prev => ({
           ...prev,
           id: metadata.id || prev.id,
+          index: metadata.index || prev.index,
           location: metadata.location || prev.location,
+          mode: metadata.mode || prev.mode,
           equipment: metadata.equipment || prev.equipment
         }));
       }
@@ -97,7 +113,7 @@ const App: React.FC = () => {
         />
       </main>
 
-      {/* Right Panel: Wider width (approx 50% wider than previous w-96) */}
+      {/* Right Panel: Wider width */}
       <aside className="w-[600px] flex-shrink-0 border-l border-slate-800 bg-slate-900/50 backdrop-blur-sm z-20 transition-all duration-300">
         <RightPanel 
           currentFile={currentFile}

@@ -1,7 +1,9 @@
 export interface PatientContextData {
-  id: string;
-  location: string;
-  equipment?: string;
+  id: string;        // Patient ID (e.g., 157)
+  index: string;     // Recording Index (e.g., 1b1)
+  location: string;  // Chest Location (e.g., Anterior Left)
+  mode: string;      // Acquisition Mode (e.g., Single Channel)
+  equipment: string; // Equipment (e.g., Meditron)
 }
 
 export interface AudioFile {

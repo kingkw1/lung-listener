@@ -1,5 +1,5 @@
 import React from 'react';
-import { Stethoscope, History, User, MapPin, Mic2 } from 'lucide-react';
+import { Stethoscope, History, User, MapPin, Mic2, FileDigit, Settings2 } from 'lucide-react';
 import { PatientContextData, RecordingLocation, AnalysisSession } from '../types';
 import { motion } from 'framer-motion';
 
@@ -10,9 +10,17 @@ interface SidebarProps {
 
 // Mock history data
 const RECENT_SESSIONS: AnalysisSession[] = [
-  { id: '101', date: '2023-10-24', patientId: 'PT-492', fileName: 'breath_sample_01.wav', resultSummary: 'Wheeze detected' },
-  { id: '102', date: '2023-10-23', patientId: 'PT-881', fileName: 'cough_series_A.wav', resultSummary: 'Normal vesicular' },
-  { id: '103', date: '2023-10-22', patientId: 'PT-120', fileName: 'checkup_v2.wav', resultSummary: 'Crackles (fine)' },
+  { id: '101', date: '2023-10-24', patientId: '157', fileName: '157_1b1_Al_sc_Meditron.wav', resultSummary: 'Wheeze detected' },
+  { id: '102', date: '2023-10-23', patientId: '122', fileName: '122_2b1_Tc_mc_LittC2SE.wav', resultSummary: 'Normal vesicular' },
+  { id: '103', date: '2023-10-22', patientId: '109', fileName: '109_1b1_Ll_sc_Meditron.wav', resultSummary: 'Crackles (fine)' },
+];
+
+const DEVICE_OPTIONS = [
+  'AKG C417L Microphone',
+  'Littmann Classic II SE',
+  'Littmann 3200 Electronic',
+  'WelchAllyn Meditron Master Elite',
+  'Other / Unknown'
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData }) => {
@@ -41,21 +49,45 @@ export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData })
         </div>
         
         <div className="space-y-4">
-          <div className="space-y-1">
-            <label htmlFor="id" className="text-xs text-slate-500 font-medium ml-1">Patient ID</label>
-            <input
-              type="text"
-              name="id"
-              id="id"
-              value={patientData.id}
-              onChange={handleInputChange}
-              placeholder="e.g. PT-2024-X"
-              className="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all placeholder:text-slate-600"
-            />
+          
+          {/* Row 1: Patient ID & Index */}
+          <div className="grid grid-cols-2 gap-3">
+             <div className="space-y-1">
+                <label htmlFor="id" className="text-[10px] text-slate-500 font-bold uppercase ml-1">Patient No.</label>
+                <div className="relative">
+                    <input
+                      type="text"
+                      name="id"
+                      id="id"
+                      value={patientData.id}
+                      onChange={handleInputChange}
+                      placeholder="101"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all placeholder:text-slate-600 font-mono"
+                    />
+                    <User size={12} className="absolute right-2.5 top-2.5 text-slate-600 pointer-events-none" />
+                </div>
+             </div>
+             
+             <div className="space-y-1">
+                <label htmlFor="index" className="text-[10px] text-slate-500 font-bold uppercase ml-1">Index</label>
+                <div className="relative">
+                    <input
+                      type="text"
+                      name="index"
+                      id="index"
+                      value={patientData.index}
+                      onChange={handleInputChange}
+                      placeholder="1b1"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all placeholder:text-slate-600 font-mono"
+                    />
+                    <FileDigit size={12} className="absolute right-2.5 top-2.5 text-slate-600 pointer-events-none" />
+                </div>
+             </div>
           </div>
 
+          {/* Row 2: Location */}
           <div className="space-y-1">
-            <label htmlFor="location" className="text-xs text-slate-500 font-medium ml-1">Recording Location</label>
+            <label htmlFor="location" className="text-[10px] text-slate-500 font-bold uppercase ml-1">Chest Location</label>
             <div className="relative">
               <select
                 name="location"
@@ -68,23 +100,48 @@ export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData })
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
               </select>
-              <MapPin size={14} className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
+              <MapPin size={12} className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
             </div>
-            
-            {/* Auto-detected Equipment Badge */}
-            {patientData.equipment && (
-                <motion.div 
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex justify-end mt-2"
-                >
-                    <div className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-slate-800 border border-slate-700">
-                        <Mic2 size={10} className="text-cyan-500" />
-                        <span className="text-[10px] text-slate-400 font-medium">Device: <span className="text-slate-300">{patientData.equipment}</span></span>
-                    </div>
-                </motion.div>
-            )}
           </div>
+
+          {/* Row 3: Acquisition Mode */}
+          <div className="space-y-1">
+             <label htmlFor="mode" className="text-[10px] text-slate-500 font-bold uppercase ml-1">Acquisition Mode</label>
+             <div className="relative">
+                <select
+                  name="mode"
+                  id="mode"
+                  value={patientData.mode}
+                  onChange={handleInputChange}
+                  className="w-full appearance-none bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                >
+                  <option value="Single Channel">Single Channel (Sequential)</option>
+                  <option value="Multichannel">Multichannel (Simultaneous)</option>
+                </select>
+                <Settings2 size={12} className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
+             </div>
+          </div>
+
+          {/* Row 4: Device */}
+          <div className="space-y-1">
+             <label htmlFor="equipment" className="text-[10px] text-slate-500 font-bold uppercase ml-1">Recording Equipment</label>
+             <div className="relative">
+                <select
+                  name="equipment"
+                  id="equipment"
+                  value={patientData.equipment}
+                  onChange={handleInputChange}
+                  className="w-full appearance-none bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-xs text-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                >
+                  <option value="" disabled>Select Device...</option>
+                  {DEVICE_OPTIONS.map((device) => (
+                     <option key={device} value={device}>{device}</option>
+                  ))}
+                </select>
+                <Mic2 size={12} className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
+             </div>
+          </div>
+
         </div>
       </div>
 
@@ -105,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData })
               className="p-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg cursor-pointer transition-colors group"
             >
               <div className="flex justify-between items-start mb-1">
-                <span className="text-xs font-bold text-slate-300">{session.patientId}</span>
+                <span className="text-xs font-bold text-slate-300">PT-{session.patientId}</span>
                 <span className="text-[10px] text-slate-500">{session.date}</span>
               </div>
               <p className="text-xs text-slate-400 truncate mb-1.5">{session.fileName}</p>
