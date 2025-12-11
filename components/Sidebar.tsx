@@ -1,5 +1,5 @@
 import React from 'react';
-import { Stethoscope, History, User, MapPin } from 'lucide-react';
+import { Stethoscope, History, User, MapPin, Mic2 } from 'lucide-react';
 import { PatientContextData, RecordingLocation, AnalysisSession } from '../types';
 import { motion } from 'framer-motion';
 
@@ -70,6 +70,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData })
               </select>
               <MapPin size={14} className="absolute right-3 top-3 text-slate-500 pointer-events-none" />
             </div>
+            
+            {/* Auto-detected Equipment Badge */}
+            {patientData.equipment && (
+                <motion.div 
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex justify-end mt-2"
+                >
+                    <div className="inline-flex items-center space-x-1.5 px-2 py-1 rounded bg-slate-800 border border-slate-700">
+                        <Mic2 size={10} className="text-cyan-500" />
+                        <span className="text-[10px] text-slate-400 font-medium">Device: <span className="text-slate-300">{patientData.equipment}</span></span>
+                    </div>
+                </motion.div>
+            )}
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 export interface PatientContextData {
   id: string;
   location: string;
+  equipment?: string;
 }
 
 export interface AudioFile {
@@ -46,5 +47,8 @@ export enum RecordingLocation {
   ANTERIOR_RIGHT = 'Anterior Right',
   POSTERIOR_LEFT = 'Posterior Left',
   POSTERIOR_RIGHT = 'Posterior Right',
-  AXILLARY = 'Axillary'
+  LATERAL_LEFT = 'Lateral Left',
+  LATERAL_RIGHT = 'Lateral Right',
+  AXILLARY = 'Axillary',
+  UNKNOWN = 'Unknown'
 }
