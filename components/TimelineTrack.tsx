@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { RegionData } from '../types';
 import { LabelControlZone } from './LabelControlZone';
+import { FileText } from 'lucide-react';
 
 interface TimelineTrackProps {
   duration: number;
@@ -165,6 +166,17 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                   Clear Labels
                 </button>
             </div>
+
+            {/* File Source Indicator */}
+            {currentLabelFile && (
+                <div className="absolute bottom-2 right-2 z-40 pointer-events-none transition-opacity opacity-50 group-hover:opacity-100">
+                    <div className="flex items-center space-x-1.5 px-2 py-1 rounded-md bg-slate-900/80 border border-slate-800 backdrop-blur-sm shadow-sm">
+                        <FileText size={10} className="text-slate-500" />
+                        <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider mr-1">Source:</span>
+                        <span className="text-[9px] text-slate-300 font-mono">{currentLabelFile}</span>
+                    </div>
+                </div>
+            )}
         </>
       )}
     </div>
