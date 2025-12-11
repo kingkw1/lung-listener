@@ -1,23 +1,22 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { AudioPlayer } from './AudioPlayer';
-import { RegionData } from '../types';
 
 // Imports from the import map
 import WaveSurfer from 'wavesurfer.js';
 import Spectrogram from 'wavesurfer.js/dist/plugins/spectrogram.esm.js';
 import Timeline from 'wavesurfer.js/dist/plugins/timeline.esm.js';
-import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 
 interface WaveformBubbleProps {
   audioUrl: string;
   title: string;
   waveColor: string;
   progressColor: string;
-  regions: RegionData[];
-  showLabels: boolean;
+  showLabels?: boolean; // Kept for interface compatibility but unused for regions now
   onLog: (msg: string) => void;
   onReady?: (duration: number) => void;
-  height?: number; // Optional height override
+  height?: number;
+  seekTo?: number | null; // New: External seek target
+  onSeek?: (time: number) => void; // New: Report seek events
 }
 
 // Generate a Plasma-like colormap (Blue -> Purple -> Red -> Yellow)
@@ -62,15 +61,14 @@ export const WaveformBubble: React.FC<WaveformBubbleProps> = ({
   title,
   waveColor,
   progressColor,
-  regions,
-  showLabels,
   onLog,
   onReady,
-  height = 100
+  height = 100,
+  seekTo,
+  onSeek
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
-  const regionsPluginRef = useRef<any>(null);
 
   // Audio State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -119,9 +117,6 @@ export const WaveformBubble: React.FC<WaveformBubbleProps> = ({
 
         onLog(`Initializing Visualization: ${title}...`);
 
-        const wsRegions = RegionsPlugin.create();
-        regionsPluginRef.current = wsRegions;
-
         ws = WaveSurfer.create({
           container: containerRef.current,
           waveColor: waveColor,
@@ -154,8 +149,7 @@ export const WaveformBubble: React.FC<WaveformBubbleProps> = ({
                   fontSize: '10px',
                   color: '#64748b',
               }
-            }),
-            wsRegions
+            })
           ],
         });
 
@@ -189,56 +183,31 @@ export const WaveformBubble: React.FC<WaveformBubbleProps> = ({
       window.clearTimeout(initTimer);
       if (ws) ws.destroy();
       wavesurferRef.current = null;
-      regionsPluginRef.current = null;
     };
   }, [audioUrl, title, waveColor, progressColor, height]);
 
-  // --- REGIONS SYNC ---
+  // Handle External Seek
   useEffect(() => {
-      if (!regionsPluginRef.current || !isReady) return;
-      
-      const plugin = regionsPluginRef.current;
-      plugin.clearRegions();
-
-      regions.forEach(r => {
-          plugin.addRegion({
-              id: r.id,
-              start: r.start,
-              end: r.end,
-              content: r.content,
-              color: r.color,
-              drag: false,
-              resize: false
-          });
-      });
-  }, [regions, isReady]);
-
-  // --- VISIBILITY SYNC ---
-  useEffect(() => {
-      if (!regionsPluginRef.current) return;
-      const regs = regionsPluginRef.current.getRegions();
-      regs.forEach((r: any) => {
-          if (r.element) r.element.style.display = showLabels ? 'block' : 'none';
-      });
-  }, [showLabels, regions, isReady]);
+    if (seekTo !== undefined && seekTo !== null && wavesurferRef.current && isReady) {
+        // Only seek if difference is significant to avoid loops
+        if (Math.abs(wavesurferRef.current.getCurrentTime() - seekTo) > 0.1) {
+            wavesurferRef.current.setTime(seekTo);
+        }
+    }
+  }, [seekTo, isReady]);
 
   const injectStyles = () => {
      const wrapper = wavesurferRef.current?.getWrapper();
      if (wrapper) {
          wrapper.style.overflow = 'visible';
          wrapper.style.zIndex = '10';
-         // We use a unique ID for the style tag based on the title to avoid collisions if multiple bubbles
+         // Full height cursor hack
          const styleId = `wavesurfer-overrides-${title.replace(/\s+/g, '-')}`;
          if (!document.getElementById(styleId)) {
              const style = document.createElement('style');
              style.id = styleId;
-             const containerId = containerRef.current?.id || 'viz-container';
-             // Scope styles to this container if possible, but for ShadowDOM parts it is global-ish
-             // We inject globally but target the class logic
              style.innerHTML = `
                 .wavesurfer-wrapper ::part(cursor) { height: 100% !important; top: 0 !important; background-color: rgba(255, 255, 255, 0.8) !important; }
-                .wavesurfer-region { height: 100% !important; top: 0 !important; z-index: 4 !important; border-left: 1px solid rgba(255,255,255,0.4); border-right: 1px solid rgba(255,255,255,0.4); }
-                ::part(region-content) { color: white; font-family: monospace; font-size: 10px; padding: 4px; text-transform: uppercase; letter-spacing: 1px; background: rgba(0,0,0,0.5); }
              `;
              document.head.appendChild(style);
          }
@@ -274,7 +243,10 @@ export const WaveformBubble: React.FC<WaveformBubbleProps> = ({
                 volume={volume}
                 isMuted={isMuted}
                 onTogglePlay={handleTogglePlay}
-                onSeek={(t) => wavesurferRef.current?.setTime(t)}
+                onSeek={(t) => {
+                    wavesurferRef.current?.setTime(t);
+                    if (onSeek) onSeek(t);
+                }}
                 onVolumeChange={(v) => { setVolume(v); wavesurferRef.current?.setVolume(isMuted ? 0 : v); }}
                 onToggleMute={() => { setIsMuted(!isMuted); wavesurferRef.current?.setVolume(!isMuted ? 0 : volume); }}
             />

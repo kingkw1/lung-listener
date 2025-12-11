@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect, DragEvent } from 'react';
-import { UploadCloud, FileAudio, X, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { UploadCloud, FileAudio, X, Loader2 } from 'lucide-react';
 import { AudioFile, AIFilterConfig, RegionData } from '../types';
 import { DebugLog } from './DebugLog';
 import { WaveformBubble } from './WaveformBubble';
-import { LabelControlZone } from './LabelControlZone';
+import { LabelTimeline } from './LabelTimeline'; // Updated import
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface CenterStageProps {
@@ -79,13 +79,15 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   // Region State
   const [aiRegions, setAiRegions] = useState<RegionData[]>([]);
   const [clinicalRegions, setClinicalRegions] = useState<RegionData[]>([]);
-  const [hasLabels, setHasLabels] = useState(false);
   const [currentLabelFile, setCurrentLabelFile] = useState<string | null>(null);
-  const [showLabels, setShowLabels] = useState(true);
 
   // Filter State
   const [filteredAudioUrl, setFilteredAudioUrl] = useState<string | null>(null);
   const [isProcessingFilter, setIsProcessingFilter] = useState(false);
+
+  // Playback Sync State
+  const [duration, setDuration] = useState(0);
+  const [seekTarget, setSeekTarget] = useState<number | null>(null);
 
   // Logs
   const [logs, setLogs] = useState<string[]>([]);
@@ -98,9 +100,10 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   useEffect(() => {
       setAiRegions([]);
       setClinicalRegions([]);
-      setHasLabels(false);
       setCurrentLabelFile(null);
       setFilteredAudioUrl(null);
+      setDuration(0);
+      setSeekTarget(null);
       setLogs([]);
       if(currentFile) addLog(`File loaded: ${currentFile.name}`);
   }, [currentFile]);
@@ -192,7 +195,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({
 
     if (newRegions.length > 0) {
         setAiRegions(prev => [...prev, ...newRegions]);
-        setHasLabels(true);
     }
   }, [aiAnalysisOutput]);
 
@@ -200,17 +202,17 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   const handleClinicalRegionsLoaded = (regions: RegionData[], fileName: string) => {
       setClinicalRegions(regions);
       setCurrentLabelFile(fileName);
-      setHasLabels(true);
-      setShowLabels(true);
       addLog(`Loaded ${regions.length} labels from ${fileName}`);
   };
 
   const handleClearClinicalRegions = () => {
       setClinicalRegions([]);
       setCurrentLabelFile(null);
-      // Only set hasLabels to false if AI regions are also empty
-      if (aiRegions.length === 0) setHasLabels(false);
       addLog('Clinical labels cleared.');
+  };
+
+  const handleSeek = (time: number) => {
+      setSeekTarget(time);
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
@@ -256,13 +258,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({
       <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-950/80 backdrop-blur z-20">
         <div className="flex items-center space-x-6">
             <h2 className="text-slate-200 font-medium">Signal Lab</h2>
-            {currentFile && hasLabels && (
-                <div className="flex items-center space-x-3 pl-6 border-l border-slate-800">
-                    <button onClick={() => setShowLabels(!showLabels)} className={`flex items-center space-x-2 px-3 py-1.5 text-xs rounded border ${showLabels ? 'bg-cyan-900/30 border-cyan-700 text-cyan-400' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>
-                        {showLabels ? <Eye size={14} /> : <EyeOff size={14} />}<span>{showLabels ? 'Labels Visible' : 'Labels Hidden'}</span>
-                    </button>
-                </div>
-            )}
         </div>
       </header>
 
@@ -323,19 +318,23 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       title="Raw Signal Lab"
                       waveColor="#06b6d4"
                       progressColor="#cffafe"
-                      regions={[...aiRegions, ...clinicalRegions]}
-                      showLabels={showLabels}
                       onLog={addLog}
+                      onReady={(d) => setDuration(d)}
+                      seekTo={seekTarget}
+                      onSeek={handleSeek}
                       height={90}
                   />
               </div>
 
-              {/* Middle Bubble: Label Import Zone */}
+              {/* Middle Bubble: Label Timeline Swimlanes */}
               <div className="flex-shrink-0">
-                  <LabelControlZone 
+                  <LabelTimeline 
+                      duration={duration}
+                      clinicalRegions={clinicalRegions}
+                      aiRegions={aiRegions}
+                      onSeek={handleSeek}
                       onRegionsLoaded={handleClinicalRegionsLoaded}
                       onClear={handleClearClinicalRegions}
-                      hasLabels={clinicalRegions.length > 0}
                       currentLabelFile={currentLabelFile}
                   />
               </div>
@@ -361,9 +360,9 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                                 title="AI Cleaned Signal (Gemini Filter Applied)"
                                 waveColor="#22c55e"
                                 progressColor="#86efac"
-                                regions={aiRegions} // Show AI regions but not clinical
-                                showLabels={showLabels}
                                 onLog={addLog}
+                                seekTo={seekTarget}
+                                onSeek={handleSeek}
                                 height={90}
                             />
                           )
