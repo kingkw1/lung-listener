@@ -8,7 +8,7 @@ import { GoogleGenAI } from "@google/genai";
 
 // Initialize the Google GenAI Client
 const ai = new GoogleGenAI({ 
-  apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.API_KEY || '' 
+  apiKey: process.env.API_KEY
 });
 
 /**
@@ -123,12 +123,14 @@ export const RightPanel: React.FC<RightPanelProps> = ({
   setIsFilterActive
 }) => {
   const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
+  const [progressMessage, setProgressMessage] = useState("Initializing...");
 
   // Phase 3: Real Gemini API Integration
   const handleDeepAnalysis = async () => {
     if (!currentFile) return;
     
     setAnalysisStatus(AnalysisStatus.ANALYZING);
+    setProgressMessage("Securely uploading buffer...");
     setMessages([]); // Clear previous analysis
     setAiAnalysisOutput(""); // Reset shared state
     setAiFilterConfig(null);
@@ -141,6 +143,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
 
         // 2. Convert to GenAI Format
         const audioPart = await fileToGenerativePart(blob);
+        
+        setProgressMessage("Gemini 3 Pro is reasoning...");
 
         // 3. Construct System Prompt & User Prompt
         // UPDATED: Added Section 4 for Python Code and Section 5 for JSON Filter Params
@@ -155,7 +159,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
 
         // 4. Initialize Stream
         const result = await ai.models.generateContentStream({
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-3-pro-preview',
             config: {
                 systemInstruction: systemInstruction,
             },
@@ -168,6 +172,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({
                 }
             ]
         });
+
+        setProgressMessage("Receiving diagnostic stream...");
 
         // 5. Process Stream
         let fullResponse = "";
@@ -226,7 +232,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         
         {/* AI Filter Toggle */}
         {aiFilterConfig && (
-            <div className="flex flex-col items-end">
+            <div className="flex flex-col items-end" title="Applies Gemini-recommended biquad filter">
                 <div className="flex items-center space-x-2">
                     <span className={`text-[10px] font-bold uppercase tracking-wider ${isFilterActive ? 'text-green-400' : 'text-slate-500'}`}>
                         {isFilterActive ? 'AI Filter Active' : 'Apply AI Filter'}
@@ -284,7 +290,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         {analysisStatus === AnalysisStatus.ANALYZING && messages.length === 0 && (
              <div className="flex items-center space-x-2 text-xs text-cyan-500 animate-pulse">
                 <Loader2 size={12} className="animate-spin" />
-                <span>Establishing connection to Gemini 2.0 Flash...</span>
+                <span>Establishing connection to Gemini...</span>
              </div>
         )}
       </div>
@@ -306,7 +312,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({
             {analysisStatus === AnalysisStatus.ANALYZING ? (
                 <>
                     <Loader2 className="animate-spin" size={16} />
-                    <span className="text-sm">Listening...</span>
+                    <span className="text-sm">{progressMessage}</span>
                 </>
             ) : (
                 <>

@@ -177,7 +177,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
           minPxPerSec: 50,
           fillParent: true,
           autoScroll: true,
-          audioContext: audioContextRef.current, // Use shared context
+          // audioContext removed as it's not a valid property in WaveSurferOptions for v7
           plugins: [
             Spectrogram.create({
               labels: true,
@@ -768,7 +768,7 @@ It is NOT a medical diagnosis. All findings must be verified by a qualified phys
                      <span className={`bg-slate-950/80 border border-slate-800 text-[10px] px-2 py-0.5 rounded font-mono ${isFilterActive ? 'text-green-400' : 'text-cyan-500'}`}>AMPLITUDE {isFilterActive ? '(FILTERED)' : ''}</span>
                   </div>
                   <div className="absolute top-[110px] left-2 z-20 pointer-events-none">
-                     <span className="bg-slate-950/80 border border-slate-800 text-amber-500 text-[10px] px-2 py-0.5 rounded font-mono">SPECTROGRAM (0-4kHz)</span>
+                     <span className="bg-slate-950/80 border border-slate-800 text-amber-500 text-[10px] px-2 py-0.5 rounded font-mono" title="Visualizes frequency intensity over time">SPECTROGRAM (0-4kHz)</span>
                   </div>
                   
                   {/* Legend Overlay */}
