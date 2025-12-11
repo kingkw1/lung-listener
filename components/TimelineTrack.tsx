@@ -60,18 +60,35 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   // This allows AI labels to "unlock" the view even if human labels aren't uploaded yet.
   const showDropZone = clinicalRegions.length === 0 && aiRegions.length === 0;
 
-  // Calculate Scroll Position with Clamping
+  // --- NEW ROBUST SCROLLING LOGIC ---
   const currentPixel = currentTime * PIXELS_PER_SECOND;
-  const totalTrackWidth = Math.max(containerWidth, duration * PIXELS_PER_SECOND);
+  const contentWidth = duration * PIXELS_PER_SECOND;
   
-  // The maximum amount we can scroll left (right edge of content aligns with right edge of viewport)
-  const maxScroll = Math.max(0, totalTrackWidth - containerWidth);
-  
-  // Desired scroll places cursor in center
-  const targetScroll = currentPixel - (containerWidth / 2);
-  
-  // Clamp scroll between 0 and maxScroll
-  const scrollLeft = Math.max(0, Math.min(targetScroll, maxScroll));
+  // Ensure the track fills the container at minimum
+  const totalScrollableWidth = Math.max(containerWidth, contentWidth);
+  const maxScroll = Math.max(0, totalScrollableWidth - containerWidth);
+  const halfWidth = containerWidth / 2;
+
+  let scrollLeft = 0;
+  let cursorLeft = 0;
+
+  if (currentPixel < halfWidth) {
+      // Phase 1: Beginning (Cursor moves, Viewport fixed at 0)
+      scrollLeft = 0;
+      cursorLeft = currentPixel;
+  } else if (currentPixel > totalScrollableWidth - halfWidth) {
+      // Phase 3: End (Cursor moves, Viewport fixed at max)
+      // For short files (content < container), maxScroll is 0, so logic holds (cursor moves across)
+      scrollLeft = maxScroll;
+      cursorLeft = currentPixel - maxScroll;
+  } else {
+      // Phase 2: Middle (Cursor fixed at center, Viewport scrolls)
+      scrollLeft = currentPixel - halfWidth;
+      cursorLeft = halfWidth; // Hard lock to center to prevent jitter
+  }
+
+  // Snap scroll to integer to prevent sub-pixel rendering jitter on the grid lines/lanes
+  scrollLeft = Math.round(scrollLeft);
   
   // Define Swimlanes
   const lanes: SwimlaneData[] = [
@@ -106,15 +123,13 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   };
 
   const handleDrop = (e: React.DragEvent) => {
-    // We do NOT stop propagation here to ensure LabelControlZone (child) gets the event if aimed there.
-    // However, we must reset our visual state.
     e.preventDefault();
     dragCounter.current = 0;
     setIsDraggingOver(false);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-      e.preventDefault(); // Essential to allow dropping
+      e.preventDefault(); 
   };
 
   return (
@@ -138,11 +153,12 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
          </div>
       ) : (
         <>
-            {/* --- SCROLLING LAYER --- */}
+            {/* --- SCROLLING CONTENT LAYER --- */}
+            {/* Contains Grid and Region Blocks */}
             <div 
                 className="absolute top-0 h-full will-change-transform"
                 style={{ 
-                    width: `${totalTrackWidth}px`,
+                    width: `${totalScrollableWidth}px`,
                     transform: `translateX(-${scrollLeft}px)` 
                 }}
             >
@@ -180,13 +196,14 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                         ))}
                     </div>
                 ))}
-
-                {/* Playhead Cursor (Absolute Position in Track) */}
-                <div 
-                    className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none shadow-[0_0_8px_rgba(255,255,255,0.6)]"
-                    style={{ left: `${currentPixel}px` }}
-                />
             </div>
+
+            {/* --- INDEPENDENT PLAYHEAD LAYER --- */}
+            {/* This is decoupled from the scroll container to ensure stability in the 'Middle' phase */}
+            <div 
+                className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none shadow-[0_0_8px_rgba(255,255,255,0.6)]"
+                style={{ left: `${cursorLeft}px` }}
+            />
 
             {/* --- FIXED OVERLAY LAYER (Labels) --- */}
             <div className="absolute inset-0 pointer-events-none">
@@ -207,10 +224,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
             </div>
 
             {/* Clear Button / Upload Overlay */}
-            {/* Logic updated: Show if hovered OR if dragging over anywhere in the track */}
             <div className={`absolute top-2 right-2 z-50 pointer-events-auto transition-opacity duration-200 flex flex-col items-end space-y-2 ${isDraggingOver ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                
-                {/* Always provide access to label uploader even if AI lane is driving the view */}
                 <div className="w-64 scale-90 origin-top-right">
                     <LabelControlZone 
                         onRegionsLoaded={onRegionsLoaded}
