@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, DragEvent } from 'react';
-import { UploadCloud, FileAudio, X, Loader2, Activity, ListMusic, Wand2 } from 'lucide-react';
+import { UploadCloud, FileAudio, X, Loader2, Activity, ListMusic, Wand2, Headphones } from 'lucide-react';
 import { AudioFile, AIFilterConfig, RegionData } from '../types';
 import { DebugLog } from './DebugLog';
 import { WaveformTrack } from './WaveformTrack'; 
@@ -74,6 +74,9 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   // Filter State
   const [filteredAudioUrl, setFilteredAudioUrl] = useState<string | null>(null);
   const [isProcessingFilter, setIsProcessingFilter] = useState(false);
+  
+  // Audio Source State (Solo/Monitor Logic)
+  const [activeAudioSource, setActiveAudioSource] = useState<'raw' | 'filtered'>('raw');
 
   // --- MASTER CLOCK STATE ---
   const [isPlaying, setIsPlaying] = useState(false);
@@ -101,6 +104,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
       setSeekTarget(null);
       setIsPlaying(false);
       setCurrentTime(0);
+      setActiveAudioSource('raw');
       setLogs([]);
       if(currentFile) addLog(`File loaded: ${currentFile.name}`);
   }, [currentFile]);
@@ -152,7 +156,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({
           const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
           const wavUrl = URL.createObjectURL(wavBlob);
           setFilteredAudioUrl(wavUrl);
-          addLog("Filter applied.");
+          setActiveAudioSource('filtered'); // Auto-switch to hearing the result
+          addLog("Filter applied. Switched active source.");
 
       } catch (error: any) {
           addLog(`Error: ${error.message}`);
@@ -237,9 +242,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   };
 
   // Determine Driver Track
-  // If Filtered Audio exists, it is the driver (volume=1). Raw Audio becomes Slave (volume=0).
-  // Otherwise Raw Audio is driver.
-  const isFilteredDriver = !!filteredAudioUrl;
+  // If active source is 'filtered' AND filtered audio exists, it drives. Otherwise Raw drives.
+  const isFilteredDriver = activeAudioSource === 'filtered' && !!filteredAudioUrl;
 
   return (
     <div className="flex flex-col h-full relative bg-slate-950">
@@ -301,8 +305,16 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                   height="260px"
                   controls={
                       <div className="flex space-x-2">
-                          <button className="px-2 py-0.5 text-[10px] bg-cyan-900/30 text-cyan-500 border border-cyan-900/50 rounded">
-                            {isFilteredDriver ? 'Muted' : 'Solo'}
+                          <button 
+                            onClick={() => setActiveAudioSource('raw')}
+                            className={`px-2 py-1 text-[10px] flex items-center rounded border transition-colors ${
+                                activeAudioSource === 'raw' 
+                                ? 'bg-cyan-600 text-white border-cyan-500' 
+                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                            }`}
+                          >
+                             <Headphones size={12} className="mr-1.5" />
+                             Monitor
                           </button>
                       </div>
                   }
@@ -315,8 +327,10 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       seekTo={seekTarget}
                       onSeek={handleSeek}
                       isPlaying={isPlaying}
-                      volume={isFilteredDriver ? 0 : (isMuted ? 0 : volume)}
-                      onTimeUpdate={!isFilteredDriver ? handleTimeUpdate : undefined}
+                      // Mute if not the active source
+                      volume={activeAudioSource === 'raw' ? (isMuted ? 0 : volume) : 0}
+                      // Drive master clock only if active
+                      onTimeUpdate={activeAudioSource === 'raw' ? handleTimeUpdate : undefined}
                   />
                </TrackRow>
 
@@ -356,7 +370,18 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                             className="bg-emerald-950/10"
                             controls={
                                 <div className="flex space-x-2">
-                                    <button className="px-2 py-0.5 text-[10px] bg-emerald-900/30 text-emerald-500 border border-emerald-900/50 rounded">Active</button>
+                                    <button 
+                                        onClick={() => setActiveAudioSource('filtered')}
+                                        disabled={isProcessingFilter}
+                                        className={`px-2 py-1 text-[10px] flex items-center rounded border transition-colors ${
+                                            activeAudioSource === 'filtered'
+                                            ? 'bg-emerald-600 text-white border-emerald-500' 
+                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                                        }`}
+                                    >
+                                        <Headphones size={12} className="mr-1.5" />
+                                        Monitor
+                                    </button>
                                 </div>
                             }
                         >
@@ -374,8 +399,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                                         seekTo={seekTarget}
                                         onSeek={handleSeek}
                                         isPlaying={isPlaying}
-                                        volume={isFilteredDriver ? (isMuted ? 0 : volume) : 0}
-                                        onTimeUpdate={isFilteredDriver ? handleTimeUpdate : undefined}
+                                        volume={activeAudioSource === 'filtered' ? (isMuted ? 0 : volume) : 0}
+                                        onTimeUpdate={activeAudioSource === 'filtered' ? handleTimeUpdate : undefined}
                                     />
                                 )
                             )}
