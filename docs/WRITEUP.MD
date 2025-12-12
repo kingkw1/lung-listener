@@ -17,7 +17,7 @@ Existing AI tools often focus on simple transcription or black-box classificatio
 
 The app solves three critical problems in the clinical workflow:
 1.  **Subjectivity:** It replaces "I think I hear a crackle" with a visual Spectrogram and precise timestamps.
-2.  **Precision:** It refines broad, messy human labels (often spanning entire breaths) into precise (<0.5s) diagnostic events.
+2.  **Precision:** It refines broad, messy human labels (often spanning entire breaths) into precise (<2s) diagnostic events.
 3.  **Signal Isolation:** It doesn't just diagnose; it acts. Gemini generates custom Python filters (High-pass/Band-pass) in real-time to scrub artifacts (heartbeats, friction) and isolate the pathology.
 
 #### **Development Process**
@@ -30,7 +30,7 @@ This entire application was "Vibe Coded" in Google AI Studio in under 5 days. Th
 
 * **The "Messy Label" Problem:**
     The ICBHI dataset (the gold standard for lung sounds) is notorious for having broad, imprecise labels that span multiple breath cycles. Initially, this confused the model.
-    * *Solution:* I implemented a "Ground Truth" visualization layer (Yellow Swimlanes) that overlays the human labels on the spectrogram. This reveals the discrepancy instantly, allowing Gemini (Purple Swimlanes) to demonstrate its superior precision by pinpointing the exact millisecond of the anomaly inside the broad human label.
+    * *Solution:* I implemented a "Ground Truth" visualization layer (Red and Yellow Swimlanes) that overlays the human labels on the spectrogram. This reveals the discrepancy instantly, allowing Gemini (Purple Swimlanes) to demonstrate its superior precision by pinpointing the exact millisecond of the anomaly inside the broad human label.
 
 * **Real-Time Signal Filtering:**
     I wanted the AI to do more than just observe. I wanted it to *fix* the audio.
@@ -39,30 +39,33 @@ This entire application was "Vibe Coded" in Google AI Studio in under 5 days. Th
 * **Scientific Visualization:**
     Telehealth tools often look like toys. To build trust with clinicians, I utilized `wavesurfer.js` to render medical-grade Mel-spectrograms. The "Dark Mode" aesthetic wasn't just a style choice; it was prompted to mimic high-end radiology workstations (PACS), reducing eye strain for researchers.
 
+* **The "Zero-Setup" Distribution Challenge:** 
+    Since Google AI Studio previews are sandboxed, I couldn't easily bundle large local audio files for the demo. I didn't want judges to have to download/upload files manually. To solve this, I turned my GitHub repository into a CDN. I "vibe coded" a custom loadRemoteCase() fetcher that streams raw .wav buffers directly from GitHub raw.githubusercontent.com. This enabled the "Reference Case Library" feature, allowing judges to test the app instantly with one click, bypassing the sandbox limitations.
+
 #### **Tech Stack**
 * **AI Model:** Gemini 3 Pro Preview (`gemini-3-pro-preview`)
 * **Platform:** Google AI Studio (Vibe Coding)
 * **Frontend:** React, Tailwind CSS, Lucide React
 * **Audio Processing:** Web Audio API, WaveSurfer.js
-* **Data:** ICBHI 2017 Respiratory Sound Database
+* **Data:** [ICBHI 2017 Respiratory Sound Database](https://www.kaggle.com/datasets/vbookshelf/respiratory-sound-database)
 
 #### **Note to Judges: How to Test**
 The app is designed for **zero-setup testing**. You can simply open the AI Studio link and click **"Run"**—it utilizes the platform's free tier for immediate analysis.
-* **Backup Plan:** If you encounter a `429 Resource Exhausted` error (due to shared quota limits), please **Fork** the project and add your own `API_KEY` to the Environment Variables.
-* **Data:** The built-in "Reference Cases" library allows you to test the app instantly with pre-loaded clinical data, no external downloads required.
+* **Backup Plan:** If you encounter a `429 Resource Exhausted` error (due to shared quota limits), please add your own paid API Key using the key shaped button at the top right of AI Studio, or by setting the API_KEY environment variable if running locally.
+* **Data:** The built-in "Reference Cases" library allows you to test the app instantly with pre-loaded clinical data, no external downloads required. Reference cases were selected from the ICBHI 2017 Respiratory Sound Database. 
 
 #### **Future Roadmap**
 * **Edge Deployment:** Porting the filtering logic to **Gemini Nano** for offline, on-device analysis in remote clinics without internet.
 * **Hardware Integration:** Connecting directly to digital stethoscopes (e.g., Littmann Core) via Web Bluetooth API.
 * **Longitudinal Tracking:** Building a patient history timeline to track disease progression over weeks rather than single visits.
-
+* **Clinical RLHF Loop:** Implementing a "Human-in-the-Loop" feedback system where pulmonologists can correct Gemini's timestamps, creating a dataset to fine-tune the model for specific rare pathologies.
 ---
 
 ### **Project Links**
 
-* **Public AI Studio Project:** https://ai.studio/apps/drive/1mwEeTs57pYeME4xJuWNaXOxVR9NWiQpR
-* **GitHub Repository:** https://github.com/kingkw1/lung-listener
-* **YouTube Demo:** https://www.youtube.com/watch?v=DeplSlKUGN4
+* **Public AI Studio App:** https://ai.studio/apps/drive/1mwEeTs57pYeME4xJuWNaXOxVR9NWiQpR
+* **Public Code Repository:** https://github.com/kingkw1/lung-listener
+* **YouTube Link:** https://www.youtube.com/watch?v=DeplSlKUGN4
 
 ---
 
