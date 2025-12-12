@@ -157,14 +157,16 @@ export const RightPanel: React.FC<RightPanelProps> = ({
         setProgressMessage("Gemini 3 Pro is reasoning...");
 
         // 3. Construct System Prompt & User Prompt
-        const systemInstruction = `You are an expert Pulmonologist. Analyze this audio waveform.
+        const systemInstruction = `You are an expert Pulmonologist. You are analyzing audio from a digital stethoscope that may contain significant friction noise and heartbeats.
 1. Quality Check: Briefly assess signal-to-noise ratio.
-2. Timeline Analysis: You MUST provide specific timestamps (e.g., '0:02 - 0:05') for the most distinct anomalies. If a sound is continuous, mark the start and end of the most intense segment.
-3. Diagnosis: Brief, bulleted potential causes.
-4. Remediation Code: Based on the anomalies found (e.g., Low-frequency heartbeats or High-frequency hiss), generate a robust Python function using \`scipy.signal\` to filter this specific audio. Include comments explaining why you chose these cutoff frequencies. Label this section "Generated Research Tool: Audio Filter".
-5. Filter Parameters: You MUST output a JSON object at the very end of your response for the recommended filter settings to be used in a Web Audio API BiquadFilterNode. Format: {"recommendedFilter": {"type": "highpass" | "lowpass" | "bandpass", "frequency": number, "Q": number}}. Do not use markdown for this JSON block, just the raw JSON string at the end.`;
+2. Noise Rejection: Ignore constant low-frequency thumping (heartbeats) and broad-spectrum scratching (friction). Focus ONLY on the distinct, high-frequency respiratory events.
+3. Timeline Analysis: You MUST provide specific timestamps (e.g., '0:02 - 0:05') for the most distinct anomalies.
+4. Timestamp Precision: Only mark the *most intense* 0.5 - 1.0 second window of the anomaly. Do not label the entire breath cycle.
+5. Diagnosis: Brief, bulleted potential causes.
+6. Remediation Code: Based on the anomalies found (e.g., Low-frequency heartbeats or High-frequency hiss), generate a robust Python function using \`scipy.signal\` to filter this specific audio. Include comments explaining why you chose these cutoff frequencies. Label this section "Generated Research Tool: Audio Filter".
+7. Filter Parameters: You MUST output a JSON object at the very end of your response for the recommended filter settings to be used in a Web Audio API BiquadFilterNode. Format: {"recommendedFilter": {"type": "highpass" | "lowpass" | "bandpass", "frequency": number, "Q": number}}. Do not use markdown for this JSON block, just the raw JSON string at the end.`;
         
-        const userPrompt = "Analyze this audio. Locate the exact start/end time of the clearest Wheeze or Crackle.";
+        const userPrompt = "Analyze this raw audio. Identify the SINGLE clearest instance of a Wheeze or Crackle. Ignore the background noise.";
 
         // 4. Initialize Model
         // Using defined constant for transparency

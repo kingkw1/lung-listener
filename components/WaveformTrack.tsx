@@ -15,6 +15,7 @@ interface WaveformTrackProps {
   isPlaying: boolean;
   volume: number;
   onTimeUpdate?: (time: number) => void; // Only provided if this track is the driver
+  zoomLevel: number;
 }
 
 // Generate a Plasma-like colormap (Blue -> Purple -> Red -> Yellow)
@@ -63,7 +64,8 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
   onSeek,
   isPlaying,
   volume,
-  onTimeUpdate
+  onTimeUpdate,
+  zoomLevel
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
@@ -112,7 +114,7 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
           barGap: 3,
           height: 100, 
           normalize: true,
-          minPxPerSec: 50,
+          minPxPerSec: zoomLevel,
           fillParent: true,
           autoScroll: true,
           interact: true, 
@@ -170,6 +172,13 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
       wavesurferRef.current = null;
     };
   }, [audioUrl, waveColor, progressColor]);
+
+  // Handle Zoom Changes dynamically
+  useEffect(() => {
+    if (wavesurferRef.current && isReady) {
+        wavesurferRef.current.zoom(zoomLevel);
+    }
+  }, [zoomLevel, isReady]);
 
   // Master Clock Sync: Play/Pause
   useEffect(() => {

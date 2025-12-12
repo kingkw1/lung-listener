@@ -12,9 +12,8 @@ interface TimelineTrackProps {
   onClear: () => void;
   currentLabelFile: string | null;
   currentTime?: number;
+  zoomLevel: number;
 }
-
-const PIXELS_PER_SECOND = 50; // Matches WaveSurfer default minPxPerSec
 
 interface SwimlaneData {
   id: string;
@@ -32,7 +31,8 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   onRegionsLoaded,
   onClear,
   currentLabelFile,
-  currentTime = 0
+  currentTime = 0,
+  zoomLevel
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -57,12 +57,11 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   const crackleRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('crackle'));
   
   // Show Drop Zone overlay ONLY if no human labels file is loaded AND no AI labels are present.
-  // Checking !currentLabelFile instead of clinicalRegions.length allows empty "Healthy" files to display the track.
   const showDropZone = !currentLabelFile && aiRegions.length === 0;
 
   // --- NEW ROBUST SCROLLING LOGIC ---
-  const currentPixel = currentTime * PIXELS_PER_SECOND;
-  const contentWidth = duration * PIXELS_PER_SECOND;
+  const currentPixel = currentTime * zoomLevel;
+  const contentWidth = duration * zoomLevel;
   
   // Ensure the track fills the container at minimum
   const totalScrollableWidth = Math.max(containerWidth, contentWidth);
@@ -167,7 +166,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                     className="absolute inset-0 pointer-events-none opacity-10" 
                     style={{ 
                         backgroundImage: 'linear-gradient(90deg, #475569 1px, transparent 1px)', 
-                        backgroundSize: `${PIXELS_PER_SECOND}px 100%` 
+                        backgroundSize: `${zoomLevel}px 100%` 
                     }}
                 />
 
@@ -187,11 +186,11 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                                 onClick={(e) => { e.stopPropagation(); onSeek(region.start); }}
                                 className={`absolute top-1 bottom-1 rounded-sm cursor-pointer hover:brightness-125 transition-all ${lane.colorClass}`}
                                 style={{
-                                    left: `${region.start * PIXELS_PER_SECOND}px`,
-                                    width: `${Math.max(2, (region.end - region.start) * PIXELS_PER_SECOND)}px`,
+                                    left: `${region.start * zoomLevel}px`,
+                                    width: `${Math.max(2, (region.end - region.start) * zoomLevel)}px`,
                                     backgroundColor: region.color
                                 }}
-                                title={`${region.content} (${region.start.toFixed(2)}s - ${region.end.toFixed(2)}s)`}
+                                title={lane.id === 'ai' ? 'Gemini 3 Pro Prediction' : `${region.content} (${region.start.toFixed(2)}s - ${region.end.toFixed(2)}s)`}
                             />
                         ))}
                     </div>

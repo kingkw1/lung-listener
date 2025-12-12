@@ -92,6 +92,9 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   
+  // Zoom State (Pixels Per Second)
+  const [zoomLevel, setZoomLevel] = useState(50);
+  
   // Controls seek updates propagated to children
   const [seekTarget, setSeekTarget] = useState<number | null>(null);
 
@@ -104,15 +107,13 @@ export const CenterStage: React.FC<CenterStageProps> = ({
 
   useEffect(() => {
       setAiRegions([]);
-      // Do NOT clear clinicalRegions here, as they might be set by the Sidebar fetch *before* currentFile effect runs completely or concurrently
-      // setClinicalRegions([]); 
-      // setCurrentLabelFile(null); 
       setFilteredAudioUrl(null);
       setDuration(0);
       setSeekTarget(null);
       setIsPlaying(false);
       setCurrentTime(0);
       setActiveAudioSource('raw');
+      setZoomLevel(50); // Reset zoom on file load
       setLogs([]);
       if(currentFile) addLog(`File loaded: ${currentFile.name}`);
   }, [currentFile]);
@@ -128,6 +129,10 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   const handleTimeUpdate = (time: number) => {
       setCurrentTime(time);
   };
+  
+  // --- ZOOM CONTROLLERS ---
+  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 50, 500));
+  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 50, 10));
 
   // --- OFFLINE AUDIO PROCESSING ---
   const processOfflineAudio = async () => {
@@ -361,6 +366,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       isPlaying={isPlaying}
                       volume={activeAudioSource === 'raw' ? (isMuted ? 0 : volume) : 0}
                       onTimeUpdate={activeAudioSource === 'raw' ? handleTimeUpdate : undefined}
+                      zoomLevel={zoomLevel}
                   />
                </TrackRow>
 
@@ -380,6 +386,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       onClear={handleClearClinicalRegions}
                       currentLabelFile={currentLabelFile}
                       currentTime={currentTime}
+                      zoomLevel={zoomLevel}
                   />
                </TrackRow>
 
@@ -403,6 +410,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                                     <button 
                                         onClick={() => setActiveAudioSource('filtered')}
                                         disabled={isProcessingFilter}
+                                        title="Apply AI-Recommended Cleaning Filter"
                                         className={`px-2 py-1 text-[10px] flex items-center rounded border transition-colors ${
                                             activeAudioSource === 'filtered'
                                             ? 'bg-emerald-600 text-white border-emerald-500' 
@@ -431,6 +439,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                                         isPlaying={isPlaying}
                                         volume={activeAudioSource === 'filtered' ? (isMuted ? 0 : volume) : 0}
                                         onTimeUpdate={activeAudioSource === 'filtered' ? handleTimeUpdate : undefined}
+                                        zoomLevel={zoomLevel}
                                     />
                                 )
                             )}
@@ -458,6 +467,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({
              onSeek={handleSeek}
              onVolumeChange={setVolume}
              onToggleMute={() => setIsMuted(!isMuted)}
+             onZoomIn={handleZoomIn}
+             onZoomOut={handleZoomOut}
           />
       )}
       

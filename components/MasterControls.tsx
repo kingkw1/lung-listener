@@ -11,6 +11,8 @@ interface MasterControlsProps {
   onSeek: (time: number) => void;
   onVolumeChange: (vol: number) => void;
   onToggleMute: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
 }
 
 export const MasterControls: React.FC<MasterControlsProps> = ({
@@ -22,7 +24,9 @@ export const MasterControls: React.FC<MasterControlsProps> = ({
   onTogglePlay,
   onSeek,
   onVolumeChange,
-  onToggleMute
+  onToggleMute,
+  onZoomIn,
+  onZoomOut
 }) => {
   
   const formatTime = (time: number) => {
@@ -54,6 +58,7 @@ export const MasterControls: React.FC<MasterControlsProps> = ({
              </button>
              <button 
                onClick={onTogglePlay}
+               title="Start/Stop Synchronized Playback"
                className={`p-3 rounded-full transition-all shadow-lg hover:scale-105 active:scale-95 ${
                  isPlaying 
                  ? 'bg-slate-100 text-slate-900 shadow-slate-900/20' 
@@ -124,9 +129,21 @@ export const MasterControls: React.FC<MasterControlsProps> = ({
 
              {/* Zoom */}
              <div className="flex items-center space-x-2">
-                 <button className="text-slate-500 hover:text-slate-300 active:scale-90 transition-transform"><ZoomOut size={18} /></button>
+                 <button 
+                    onClick={onZoomOut} 
+                    title="Zoom Out (Time Axis)"
+                    className="text-slate-500 hover:text-slate-300 active:scale-90 transition-transform"
+                 >
+                     <ZoomOut size={18} />
+                 </button>
                  <span className="text-[10px] text-slate-600 font-mono uppercase">Zoom</span>
-                 <button className="text-slate-500 hover:text-slate-300 active:scale-90 transition-transform"><ZoomIn size={18} /></button>
+                 <button 
+                    onClick={onZoomIn} 
+                    title="Zoom In (Time Axis)"
+                    className="text-slate-500 hover:text-slate-300 active:scale-90 transition-transform"
+                 >
+                     <ZoomIn size={18} />
+                 </button>
              </div>
         </div>
     </div>
