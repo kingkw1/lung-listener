@@ -13,6 +13,11 @@ interface CenterStageProps {
   setCurrentFile: React.Dispatch<React.SetStateAction<AudioFile | null>>;
   aiAnalysisOutput: string;
   aiFilterConfig: AIFilterConfig | null;
+  // Lifted state props
+  clinicalRegions: RegionData[];
+  setClinicalRegions: React.Dispatch<React.SetStateAction<RegionData[]>>;
+  currentLabelFile: string | null;
+  setCurrentLabelFile: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 const bufferToWave = (abuffer: AudioBuffer, len: number) => {
@@ -61,16 +66,18 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   currentFile, 
   setCurrentFile, 
   aiAnalysisOutput, 
-  aiFilterConfig
+  aiFilterConfig,
+  clinicalRegions,
+  setClinicalRegions,
+  currentLabelFile,
+  setCurrentLabelFile
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Region State
+  // Region State (AI Regions are still local as they are derived from AI output)
   const [aiRegions, setAiRegions] = useState<RegionData[]>([]);
-  const [clinicalRegions, setClinicalRegions] = useState<RegionData[]>([]);
-  const [currentLabelFile, setCurrentLabelFile] = useState<string | null>(null);
-
+  
   // Filter State
   const [filteredAudioUrl, setFilteredAudioUrl] = useState<string | null>(null);
   const [isProcessingFilter, setIsProcessingFilter] = useState(false);
@@ -97,8 +104,9 @@ export const CenterStage: React.FC<CenterStageProps> = ({
 
   useEffect(() => {
       setAiRegions([]);
-      setClinicalRegions([]);
-      setCurrentLabelFile(null);
+      // Do NOT clear clinicalRegions here, as they might be set by the Sidebar fetch *before* currentFile effect runs completely or concurrently
+      // setClinicalRegions([]); 
+      // setCurrentLabelFile(null); 
       setFilteredAudioUrl(null);
       setDuration(0);
       setSeekTarget(null);
@@ -176,16 +184,13 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   }, [aiFilterConfig]);
 
   // --- AI REGION PARSING ---
-  // Updated to fully re-parse string to prevent stale state issues
   useEffect(() => {
     if (!aiAnalysisOutput) {
         if (aiRegions.length > 0) setAiRegions([]);
         return;
     }
     
-    // Improved Regex:
-    // Captures timestamps format like "0:28 - 0:34", "1:05 to 1:10", "0:00 – 0:05"
-    // Handles various dash types and whitespace flexibility
+    // Improved Regex for timestamps
     const regex = /(\d{1,2}):(\d{2})\s*(?:[-–—]|to)\s*(\d{1,2}):(\d{2})/gi;
     
     let match;
@@ -200,28 +205,24 @@ export const CenterStage: React.FC<CenterStageProps> = ({
         const start = startMin * 60 + startSec;
         const end = endMin * 60 + endSec;
 
-        // Skip invalid ranges
         if (end <= start) continue;
 
         const id = `ai-region-${start}-${end}`;
         
-        // Avoid duplicates
         if (!parsedRegions.find(r => r.id === id)) {
             parsedRegions.push({
                 id,
                 start,
                 end,
                 content: 'AI Diagnosis',
-                color: 'rgba(168, 85, 247, 0.9)' // Purple-500 equivalent, high visibility
+                color: 'rgba(168, 85, 247, 0.9)'
             });
         }
     }
     
-    // Update state if regions have changed
     const isDifferent = JSON.stringify(parsedRegions) !== JSON.stringify(aiRegions);
     if (isDifferent) {
         setAiRegions(parsedRegions);
-        // Log new findings
         if (parsedRegions.length > aiRegions.length) {
             addLog(`Gemini found ${parsedRegions.length} temporal anomalies.`);
         }
@@ -261,16 +262,19 @@ export const CenterStage: React.FC<CenterStageProps> = ({
       lastModified: file.lastModified,
       url: url
     });
+    // Reset regions when manually uploading a new file
+    setClinicalRegions([]);
+    setCurrentLabelFile(null);
   };
 
   const clearFile = () => {
     if (currentFile) URL.revokeObjectURL(currentFile.url);
     if (filteredAudioUrl) URL.revokeObjectURL(filteredAudioUrl);
     setCurrentFile(null);
+    setClinicalRegions([]);
+    setCurrentLabelFile(null);
   };
 
-  // Determine Driver Track
-  // If active source is 'filtered' AND filtered audio exists, it drives. Otherwise Raw drives.
   const isFilteredDriver = activeAudioSource === 'filtered' && !!filteredAudioUrl;
 
   return (
@@ -355,9 +359,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       seekTo={seekTarget}
                       onSeek={handleSeek}
                       isPlaying={isPlaying}
-                      // Mute if not the active source
                       volume={activeAudioSource === 'raw' ? (isMuted ? 0 : volume) : 0}
-                      // Drive master clock only if active
                       onTimeUpdate={activeAudioSource === 'raw' ? handleTimeUpdate : undefined}
                   />
                </TrackRow>

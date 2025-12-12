@@ -9,6 +9,45 @@ interface LabelControlZoneProps {
   currentLabelFile: string | null;
 }
 
+// Reusable parser for external use (e.g., Demo loader)
+export const parseLabelString = (text: string): RegionData[] => {
+    const lines = text.split('\n');
+    const newRegions: RegionData[] = [];
+
+    lines.forEach((line, idx) => {
+        if (!line.trim()) return;
+        // Support tab or space delimited
+        const parts = line.split(/[\t\s]+/).map(s => s.trim());
+        
+        // ICBHI Format: Start | End | Crackles | Wheezes
+        // Example: 0.05  0.8  0  1
+        if (parts.length < 4) return;
+
+        const start = parseFloat(parts[0]);
+        const end = parseFloat(parts[1]);
+        const crackles = parseInt(parts[2]);
+        const wheezes = parseInt(parts[3]);
+
+        if (isNaN(start) || isNaN(end)) return;
+
+        const idBase = `clinical-${idx}-${start}-${end}`;
+
+        if (wheezes === 1) {
+            newRegions.push({
+                id: `${idBase}-wheeze`,
+                start, end, content: 'Wheeze', color: 'rgba(239, 68, 68, 0.3)'
+            });
+        }
+        if (crackles === 1) {
+            newRegions.push({
+                id: `${idBase}-crackle`,
+                start, end, content: 'Crackle', color: 'rgba(234, 179, 8, 0.3)'
+            });
+        }
+    });
+    return newRegions;
+};
+
 export const LabelControlZone: React.FC<LabelControlZoneProps> = ({ 
   onRegionsLoaded, 
   onClear, 
@@ -56,40 +95,7 @@ export const LabelControlZone: React.FC<LabelControlZoneProps> = ({
       if (!text) return;
 
       try {
-        const lines = text.split('\n');
-        const newRegions: RegionData[] = [];
-
-        lines.forEach((line, idx) => {
-            if (!line.trim()) return;
-            // Support tab or space delimited
-            const parts = line.split(/[\t\s]+/).map(s => s.trim());
-            
-            // ICBHI Format: Start | End | Crackles | Wheezes
-            // Example: 0.05  0.8  0  1
-            if (parts.length < 4) return;
-
-            const start = parseFloat(parts[0]);
-            const end = parseFloat(parts[1]);
-            const crackles = parseInt(parts[2]);
-            const wheezes = parseInt(parts[3]);
-
-            if (isNaN(start) || isNaN(end)) return;
-
-            const idBase = `clinical-${idx}-${start}-${end}`;
-
-            if (wheezes === 1) {
-                newRegions.push({
-                    id: `${idBase}-wheeze`,
-                    start, end, content: 'Wheeze', color: 'rgba(239, 68, 68, 0.3)'
-                });
-            }
-            if (crackles === 1) {
-                newRegions.push({
-                    id: `${idBase}-crackle`,
-                    start, end, content: 'Crackle', color: 'rgba(234, 179, 8, 0.3)'
-                });
-            }
-        });
+        const newRegions = parseLabelString(text);
 
         if (newRegions.length === 0) {
             setError('No valid regions found in file.');

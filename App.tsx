@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CenterStage } from './components/CenterStage';
 import { RightPanel } from './components/RightPanel';
-import { PatientContextData, AudioFile, AnalysisStatus, AIFilterConfig, RecordingLocation } from './types';
+import { PatientContextData, AudioFile, AnalysisStatus, AIFilterConfig, RecordingLocation, RegionData } from './types';
+import { parseLabelString } from './components/LabelControlZone';
 
 // --- UTILITY: SMART METADATA PARSER ---
 const parseICBHIMetadata = (fileName: string): Partial<PatientContextData> | null => {
@@ -67,6 +68,10 @@ const App: React.FC = () => {
   const [currentFile, setCurrentFile] = useState<AudioFile | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
   
+  // Lifted State: Clinical Regions (Shared between Sidebar loader and CenterStage display)
+  const [clinicalRegions, setClinicalRegions] = useState<RegionData[]>([]);
+  const [currentLabelFile, setCurrentLabelFile] = useState<string | null>(null);
+
   // Shared state for AI text stream
   const [aiAnalysisOutput, setAiAnalysisOutput] = useState<string>("");
 
@@ -91,6 +96,28 @@ const App: React.FC = () => {
     }
   }, [currentFile]);
 
+  // Handler for loading demo cases from Sidebar
+  const handleLoadDemo = (audioFile: File, labelText: string, labelFileName: string) => {
+    // 1. Set Audio File
+    const url = URL.createObjectURL(audioFile);
+    setCurrentFile({
+      name: audioFile.name,
+      size: audioFile.size,
+      type: audioFile.type,
+      lastModified: audioFile.lastModified,
+      url: url
+    });
+
+    // 2. Parse and Set Labels
+    try {
+        const regions = parseLabelString(labelText);
+        setClinicalRegions(regions);
+        setCurrentLabelFile(labelFileName);
+    } catch (e) {
+        console.error("Failed to parse demo labels", e);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
       {/* 3-Column Layout */}
@@ -100,6 +127,7 @@ const App: React.FC = () => {
         <Sidebar 
           patientData={patientData} 
           setPatientData={setPatientData} 
+          onLoadDemo={handleLoadDemo}
         />
       </aside>
 
@@ -110,6 +138,11 @@ const App: React.FC = () => {
           setCurrentFile={setCurrentFile}
           aiAnalysisOutput={aiAnalysisOutput}
           aiFilterConfig={aiFilterConfig}
+          // Pass down lifted state and setters
+          clinicalRegions={clinicalRegions}
+          setClinicalRegions={setClinicalRegions}
+          currentLabelFile={currentLabelFile}
+          setCurrentLabelFile={setCurrentLabelFile}
         />
       </main>
 

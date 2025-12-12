@@ -1,18 +1,36 @@
-import React from 'react';
-import { Stethoscope, History, User, MapPin, Mic2, FileDigit, Settings2 } from 'lucide-react';
-import { PatientContextData, RecordingLocation, AnalysisSession } from '../types';
+import React, { useState } from 'react';
+import { Stethoscope, Library, User, MapPin, Mic2, FileDigit, Settings2, PlayCircle, Loader2 } from 'lucide-react';
+import { PatientContextData, RecordingLocation } from '../types';
 import { motion } from 'framer-motion';
 
 interface SidebarProps {
   patientData: PatientContextData;
   setPatientData: React.Dispatch<React.SetStateAction<PatientContextData>>;
+  onLoadDemo: (audioFile: File, labelText: string, labelFileName: string) => void;
 }
 
-// Mock history data
-const RECENT_SESSIONS: AnalysisSession[] = [
-  { id: '101', date: '2023-10-24', patientId: '157', fileName: '157_1b1_Al_sc_Meditron.wav', resultSummary: 'Wheeze detected' },
-  { id: '102', date: '2023-10-23', patientId: '122', fileName: '122_2b1_Tc_mc_LittC2SE.wav', resultSummary: 'Normal vesicular' },
-  { id: '103', date: '2023-10-22', patientId: '109', fileName: '109_1b1_Ll_sc_Meditron.wav', resultSummary: 'Crackles (fine)' },
+const DEMO_CASES = [
+  {
+    name: "Case 1: Crackles (Pneumonia)",
+    audioUrl: "https://raw.githubusercontent.com/kingkw1/geminiKaggleHackathonMedia/main/crackle/218_1b1_Pr_sc_Meditron.wav",
+    labelUrl: "https://raw.githubusercontent.com/kingkw1/geminiKaggleHackathonMedia/main/crackle/218_1b1_Pr_sc_Meditron.txt",
+    filename: "218_1b1_Pr_sc_Meditron.wav",
+    patientId: "218"
+  },
+  {
+    name: "Case 2: Wheeze (Asthma/COPD)",
+    audioUrl: "https://raw.githubusercontent.com/kingkw1/geminiKaggleHackathonMedia/main/wheeze/175_1b1_Ll_sc_Litt3200.wav",
+    labelUrl: "https://raw.githubusercontent.com/kingkw1/geminiKaggleHackathonMedia/main/wheeze/175_1b1_Ll_sc_Litt3200.txt",
+    filename: "175_1b1_Ll_sc_Litt3200.wav",
+    patientId: "175"
+  },
+  {
+    name: "Case 3: Healthy Control",
+    audioUrl: "https://raw.githubusercontent.com/kingkw1/geminiKaggleHackathonMedia/main/healthy/202_1b1_Ar_sc_Meditron.wav",
+    labelUrl: "https://raw.githubusercontent.com/kingkw1/geminiKaggleHackathonMedia/main/healthy/202_1b1_Ar_sc_Meditron.txt",
+    filename: "202_1b1_Ar_sc_Meditron.wav",
+    patientId: "202"
+  }
 ];
 
 const DEVICE_OPTIONS = [
@@ -23,11 +41,40 @@ const DEVICE_OPTIONS = [
   'Other / Unknown'
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData, onLoadDemo }) => {
+  const [loadingCase, setLoadingCase] = useState<string | null>(null);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setPatientData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const loadRemoteCase = async (demoCase: typeof DEMO_CASES[0]) => {
+    setLoadingCase(demoCase.name);
+    try {
+        // Step A: Fetch Audio
+        const audioRes = await fetch(demoCase.audioUrl);
+        if (!audioRes.ok) throw new Error("Failed to fetch audio");
+        const audioBlob = await audioRes.blob();
+        const audioFile = new File([audioBlob], demoCase.filename, { type: 'audio/wav' });
+
+        // Step B: Fetch Labels
+        const labelRes = await fetch(demoCase.labelUrl);
+        if (!labelRes.ok) throw new Error("Failed to fetch labels");
+        const labelText = await labelRes.text();
+
+        // Step C: Trigger Load in App
+        onLoadDemo(audioFile, labelText, demoCase.filename.replace('.wav', '.txt'));
+        
+        // Auto-fill Patient ID
+        setPatientData(prev => ({ ...prev, id: demoCase.patientId }));
+
+    } catch (e) {
+        console.error(e);
+        alert("Failed to load demo case. Please check your connection.");
+    } finally {
+        setLoadingCase(null);
+    }
   };
 
   return (
@@ -145,32 +192,46 @@ export const Sidebar: React.FC<SidebarProps> = ({ patientData, setPatientData })
         </div>
       </div>
 
-      {/* Session History */}
+      {/* Reference Cases Section */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <div className="flex items-center space-x-2 text-slate-400 mb-4">
-          <History size={16} />
-          <h2 className="text-sm font-semibold uppercase tracking-wide">Session History</h2>
+          <Library size={16} />
+          <h2 className="text-sm font-semibold uppercase tracking-wide">Reference Cases</h2>
         </div>
         
         <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-          {RECENT_SESSIONS.map((session, index) => (
-            <motion.div 
-              key={session.id}
+          {DEMO_CASES.map((demo, index) => (
+            <motion.button 
+              key={demo.name}
+              onClick={() => loadRemoteCase(demo)}
+              disabled={!!loadingCase}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="p-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg cursor-pointer transition-colors group"
+              className={`w-full text-left p-3 rounded-lg border transition-all duration-200 group relative overflow-hidden
+                  ${loadingCase === demo.name 
+                      ? 'bg-slate-800 border-cyan-500/50 cursor-wait' 
+                      : 'bg-slate-800/40 border-slate-800 hover:bg-slate-800 hover:border-cyan-900/50 cursor-pointer'
+                  }
+              `}
             >
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-xs font-bold text-slate-300">PT-{session.patientId}</span>
-                <span className="text-[10px] text-slate-500">{session.date}</span>
+              <div className="flex justify-between items-center mb-1 relative z-10">
+                <span className={`text-xs font-bold transition-colors ${loadingCase === demo.name ? 'text-cyan-400' : 'text-slate-300 group-hover:text-cyan-200'}`}>
+                    {demo.name}
+                </span>
+                {loadingCase === demo.name ? (
+                    <Loader2 size={14} className="animate-spin text-cyan-500" />
+                ) : (
+                    <PlayCircle size={14} className="text-slate-600 group-hover:text-cyan-500 transition-colors" />
+                )}
               </div>
-              <p className="text-xs text-slate-400 truncate mb-1.5">{session.fileName}</p>
-              <div className="flex items-center">
-                <span className={`w-1.5 h-1.5 rounded-full mr-2 ${session.resultSummary.includes('Normal') ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-                <span className="text-[10px] font-medium text-slate-400 group-hover:text-cyan-400 transition-colors">{session.resultSummary}</span>
-              </div>
-            </motion.div>
+              <p className="text-[10px] text-slate-500 truncate font-mono relative z-10">
+                 {demo.filename}
+              </p>
+              
+              {/* Active Indicator Bar */}
+              <div className={`absolute bottom-0 left-0 h-0.5 bg-cyan-500 transition-all duration-500 ${loadingCase === demo.name ? 'w-full' : 'w-0'}`} />
+            </motion.button>
           ))}
         </div>
       </div>
