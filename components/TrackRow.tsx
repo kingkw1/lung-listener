@@ -9,6 +9,7 @@ interface TrackRowProps {
   height?: number | string;
   isExpanded?: boolean;
   className?: string;
+  isDarkMode?: boolean;
 }
 
 export const TrackRow: React.FC<TrackRowProps> = ({ 
@@ -19,16 +20,17 @@ export const TrackRow: React.FC<TrackRowProps> = ({
   children, 
   height = 'auto', 
   isExpanded = true,
-  className = ''
+  className = '',
+  isDarkMode = true
 }) => {
   if (!isExpanded) return null;
 
   return (
-    <div className={`flex w-full border-b border-slate-800 bg-slate-900/30 ${className}`}>
+    <div className={`flex w-full border-b ${isDarkMode ? 'border-slate-800 bg-slate-900/30' : 'border-slate-200 bg-white'} ${className}`}>
       {/* Header Column: Fixed Width */}
-      <div className="w-56 flex-shrink-0 border-r border-slate-800 bg-slate-900 flex flex-col justify-between p-3 z-10">
+      <div className={`w-56 flex-shrink-0 border-r flex flex-col justify-between p-3 z-10 ${isDarkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
         <div>
-          <div className="flex items-center space-x-2 mb-1 text-slate-200 font-bold text-xs uppercase tracking-wider">
+          <div className={`flex items-center space-x-2 mb-1 font-bold text-xs uppercase tracking-wider ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>
             {icon && <span className="text-slate-500">{icon}</span>}
             <span className="truncate">{title}</span>
           </div>
@@ -43,7 +45,7 @@ export const TrackRow: React.FC<TrackRowProps> = ({
       </div>
 
       {/* Viewport Column: Flex Grow */}
-      <div className="flex-1 relative min-w-0 bg-slate-950/50" style={{ height }}>
+      <div className={`flex-1 relative min-w-0 ${isDarkMode ? 'bg-slate-950/50' : 'bg-slate-50/50'}`} style={{ height }}>
         {children}
       </div>
     </div>

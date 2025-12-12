@@ -13,6 +13,7 @@ interface TimelineTrackProps {
   currentLabelFile: string | null;
   currentTime?: number;
   zoomLevel: number;
+  isDarkMode: boolean;
 }
 
 interface SwimlaneData {
@@ -32,7 +33,8 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   onClear,
   currentLabelFile,
   currentTime = 0,
-  zoomLevel
+  zoomLevel,
+  isDarkMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -77,16 +79,14 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
       cursorLeft = currentPixel;
   } else if (currentPixel > totalScrollableWidth - halfWidth) {
       // Phase 3: End (Cursor moves, Viewport fixed at max)
-      // For short files (content < container), maxScroll is 0, so logic holds (cursor moves across)
       scrollLeft = maxScroll;
       cursorLeft = currentPixel - maxScroll;
   } else {
       // Phase 2: Middle (Cursor fixed at center, Viewport scrolls)
       scrollLeft = currentPixel - halfWidth;
-      cursorLeft = halfWidth; // Hard lock to center to prevent jitter
+      cursorLeft = halfWidth; 
   }
 
-  // Snap scroll to integer to prevent sub-pixel rendering jitter on the grid lines/lanes
   scrollLeft = Math.round(scrollLeft);
   
   // Define Swimlanes
@@ -134,7 +134,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   return (
     <div 
         ref={containerRef} 
-        className="w-full h-full bg-slate-900/20 relative overflow-hidden group"
+        className={`w-full h-full relative overflow-hidden group ${isDarkMode ? 'bg-slate-900/20' : 'bg-slate-100/50'}`}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
@@ -142,7 +142,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
     >
       
       {showDropZone ? (
-         <div className="absolute inset-0 z-50 p-2 bg-slate-900/50 backdrop-blur-[1px]">
+         <div className={`absolute inset-0 z-50 p-2 backdrop-blur-[1px] ${isDarkMode ? 'bg-slate-900/50' : 'bg-slate-50/50'}`}>
             <LabelControlZone 
                 onRegionsLoaded={onRegionsLoaded}
                 onClear={onClear}
@@ -153,7 +153,6 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
       ) : (
         <>
             {/* --- SCROLLING CONTENT LAYER --- */}
-            {/* Contains Grid and Region Blocks */}
             <div 
                 className="absolute top-0 h-full will-change-transform"
                 style={{ 
@@ -165,7 +164,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                 <div 
                     className="absolute inset-0 pointer-events-none opacity-10" 
                     style={{ 
-                        backgroundImage: 'linear-gradient(90deg, #475569 1px, transparent 1px)', 
+                        backgroundImage: `linear-gradient(90deg, ${isDarkMode ? '#475569' : '#94a3b8'} 1px, transparent 1px)`, 
                         backgroundSize: `${zoomLevel}px 100%` 
                     }}
                 />
@@ -174,7 +173,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                 {lanes.map((lane, index) => (
                     <div 
                         key={lane.id} 
-                        className="absolute w-full border-b border-slate-800/30"
+                        className={`absolute w-full border-b ${isDarkMode ? 'border-slate-800/30' : 'border-slate-200/50'}`}
                         style={{ 
                             top: index * rowHeight, 
                             height: rowHeight 
@@ -198,9 +197,8 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
             </div>
 
             {/* --- INDEPENDENT PLAYHEAD LAYER --- */}
-            {/* This is decoupled from the scroll container to ensure stability in the 'Middle' phase */}
             <div 
-                className="absolute top-0 bottom-0 w-0.5 bg-white z-40 pointer-events-none shadow-[0_0_8px_rgba(255,255,255,0.6)]"
+                className={`absolute top-0 bottom-0 w-0.5 z-40 pointer-events-none ${isDarkMode ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 'bg-teal-600 shadow-[0_0_4px_rgba(13,148,136,0.4)]'}`}
                 style={{ left: `${cursorLeft}px` }}
             />
 
@@ -215,7 +213,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                             height: rowHeight 
                         }}
                     >
-                         <div className={`px-1.5 py-0.5 rounded bg-slate-900/80 backdrop-blur-sm text-[9px] font-bold uppercase tracking-wider shadow-sm border border-slate-800 ${lane.badgeColor}`}>
+                         <div className={`px-1.5 py-0.5 rounded backdrop-blur-sm text-[9px] font-bold uppercase tracking-wider shadow-sm border ${lane.badgeColor} ${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
                              {lane.label}
                          </div>
                     </div>
@@ -237,7 +235,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
             {/* File Source Indicator */}
             {currentLabelFile && (
                 <div className="absolute bottom-2 right-2 z-40 pointer-events-none transition-opacity opacity-50 group-hover:opacity-100">
-                    <div className="flex items-center space-x-1.5 px-2 py-1 rounded-md bg-slate-900/80 border border-slate-800 backdrop-blur-sm shadow-sm">
+                    <div className={`flex items-center space-x-1.5 px-2 py-1 rounded-md border backdrop-blur-sm shadow-sm ${isDarkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
                         <FileText size={10} className="text-slate-500" />
                         <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider mr-1">Source:</span>
                         <span className="text-[9px] text-slate-300 font-mono">{currentLabelFile}</span>

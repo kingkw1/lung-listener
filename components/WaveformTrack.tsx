@@ -16,6 +16,7 @@ interface WaveformTrackProps {
   volume: number;
   onTimeUpdate?: (time: number) => void; // Only provided if this track is the driver
   zoomLevel: number;
+  isDarkMode: boolean;
 }
 
 // Generate a Plasma-like colormap (Blue -> Purple -> Red -> Yellow)
@@ -65,7 +66,8 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
   isPlaying,
   volume,
   onTimeUpdate,
-  zoomLevel
+  zoomLevel,
+  isDarkMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
@@ -108,7 +110,7 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
           container: containerRef.current,
           waveColor: waveColor,
           progressColor: progressColor,
-          cursorColor: '#ffffff',
+          cursorColor: isDarkMode ? '#ffffff' : '#0f172a',
           cursorWidth: 1, // Thinner cursor for track view
           barWidth: 2,
           barGap: 3,
@@ -122,8 +124,8 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
             Spectrogram.create({
               labels: true,
               height: 140, 
-              labelsColor: '#ffffff', // White labels for better contrast
-              labelsBackground: 'rgba(2, 6, 23, 0.7)', // Dark background to ensure legibility on loud signals
+              labelsColor: isDarkMode ? '#ffffff' : '#334155', // Adjust for theme
+              labelsBackground: isDarkMode ? 'rgba(2, 6, 23, 0.7)' : 'rgba(255, 255, 255, 0.8)', 
               frequencyMin: 0,
               frequencyMax: 4000,
               fftSamples: 1024,
@@ -171,7 +173,7 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
       if (ws) ws.destroy();
       wavesurferRef.current = null;
     };
-  }, [audioUrl, waveColor, progressColor]);
+  }, [audioUrl, waveColor, progressColor, isDarkMode]); // Re-init on theme change to update Spectrogram config
 
   // Handle Zoom Changes dynamically
   useEffect(() => {
@@ -219,7 +221,7 @@ export const WaveformTrack: React.FC<WaveformTrackProps> = ({
             const style = document.createElement('style');
             style.id = styleId;
             style.innerHTML = `
-                .wavesurfer-wrapper ::part(cursor) { height: 100% !important; top: 0 !important; background-color: rgba(255, 255, 255, 0.5) !important; }
+                .wavesurfer-wrapper ::part(cursor) { height: 100% !important; top: 0 !important; background-color: ${isDarkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(15, 23, 42, 0.5)'} !important; }
                 .wavesurfer-wrapper ::part(scroll) { scrollbar-width: none; }
                 .wavesurfer-wrapper ::part(scroll)::-webkit-scrollbar { display: none; }
             `;

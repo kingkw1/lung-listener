@@ -79,6 +79,9 @@ const App: React.FC = () => {
   const [aiFilterConfig, setAiFilterConfig] = useState<AIFilterConfig | null>(null);
   const [isFilterActive, setIsFilterActive] = useState(false);
 
+  // Theme State
+  const [isDarkMode, setIsDarkMode] = useState(true);
+
   // --- EFFECT: AUTO-FILL METADATA ---
   useEffect(() => {
     if (currentFile) {
@@ -119,20 +122,21 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans">
+    <div className={`flex h-screen w-screen overflow-hidden font-sans transition-colors duration-300 ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {/* 3-Column Layout */}
       
       {/* Left Sidebar: Fixed width */}
-      <aside className="w-80 flex-shrink-0 border-r border-slate-800 bg-slate-900/50 backdrop-blur-sm z-20">
+      <aside className={`w-80 flex-shrink-0 border-r transition-colors duration-300 z-20 ${isDarkMode ? 'border-slate-800 bg-slate-900/50 backdrop-blur-sm' : 'border-slate-200 bg-white'}`}>
         <Sidebar 
           patientData={patientData} 
           setPatientData={setPatientData} 
           onLoadDemo={handleLoadDemo}
+          isDarkMode={isDarkMode}
         />
       </aside>
 
       {/* Center Stage: Flex grow */}
-      <main className="flex-1 flex flex-col min-w-0 bg-slate-950 relative">
+      <main className={`flex-1 flex flex-col min-w-0 relative transition-colors duration-300 ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
         <CenterStage 
           currentFile={currentFile} 
           setCurrentFile={setCurrentFile}
@@ -143,11 +147,12 @@ const App: React.FC = () => {
           setClinicalRegions={setClinicalRegions}
           currentLabelFile={currentLabelFile}
           setCurrentLabelFile={setCurrentLabelFile}
+          isDarkMode={isDarkMode}
         />
       </main>
 
       {/* Right Panel: Wider width */}
-      <aside className="w-[600px] flex-shrink-0 border-l border-slate-800 bg-slate-900/50 backdrop-blur-sm z-20 transition-all duration-300">
+      <aside className={`w-[600px] flex-shrink-0 border-l transition-colors duration-300 z-20 ${isDarkMode ? 'border-slate-800 bg-slate-900/50 backdrop-blur-sm' : 'border-slate-200 bg-white'}`}>
         <RightPanel 
           currentFile={currentFile}
           analysisStatus={analysisStatus}
@@ -159,6 +164,8 @@ const App: React.FC = () => {
           setIsFilterActive={setIsFilterActive}
           aiFilterConfig={aiFilterConfig}
           patientData={patientData}
+          isDarkMode={isDarkMode}
+          setIsDarkMode={setIsDarkMode}
         />
       </aside>
     </div>

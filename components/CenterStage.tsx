@@ -13,11 +13,11 @@ interface CenterStageProps {
   setCurrentFile: React.Dispatch<React.SetStateAction<AudioFile | null>>;
   aiAnalysisOutput: string;
   aiFilterConfig: AIFilterConfig | null;
-  // Lifted state props
   clinicalRegions: RegionData[];
   setClinicalRegions: React.Dispatch<React.SetStateAction<RegionData[]>>;
   currentLabelFile: string | null;
   setCurrentLabelFile: React.Dispatch<React.SetStateAction<string | null>>;
+  isDarkMode: boolean;
 }
 
 const bufferToWave = (abuffer: AudioBuffer, len: number) => {
@@ -70,7 +70,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({
   clinicalRegions,
   setClinicalRegions,
   currentLabelFile,
-  setCurrentLabelFile
+  setCurrentLabelFile,
+  isDarkMode
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,16 +197,16 @@ export const CenterStage: React.FC<CenterStageProps> = ({
     }
     
     // Improved Regex for timestamps
-    const regex = /(\d{1,2}):(\d{2})\s*(?:[-–—]|to)\s*(\d{1,2}):(\d{2})/gi;
+    const regex = /(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\s*(?:[-–—]|to)\s*(\d{1,2}):(\d{2}(?:\.\d{1,3})?)/gi;
     
     let match;
     const parsedRegions: RegionData[] = [];
 
     while ((match = regex.exec(aiAnalysisOutput)) !== null) {
         const startMin = parseInt(match[1], 10);
-        const startSec = parseInt(match[2], 10);
+        const startSec = parseFloat(match[2]);
         const endMin = parseInt(match[3], 10);
-        const endSec = parseInt(match[4], 10);
+        const endSec = parseFloat(match[4]);
 
         const start = startMin * 60 + startSec;
         const end = endMin * 60 + endSec;
@@ -267,7 +268,6 @@ export const CenterStage: React.FC<CenterStageProps> = ({
       lastModified: file.lastModified,
       url: url
     });
-    // Reset regions when manually uploading a new file
     setClinicalRegions([]);
     setCurrentLabelFile(null);
   };
@@ -280,16 +280,14 @@ export const CenterStage: React.FC<CenterStageProps> = ({
     setCurrentLabelFile(null);
   };
 
-  const isFilteredDriver = activeAudioSource === 'filtered' && !!filteredAudioUrl;
-
   return (
-    <div className="flex flex-col h-full relative bg-slate-950">
+    <div className={`flex flex-col h-full relative ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}>
       
       {/* 1. Header Area */}
-      <header className="h-14 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-950 z-20">
+      <header className={`h-14 border-b flex items-center justify-between px-6 z-20 transition-colors ${isDarkMode ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'}`}>
         <div className="flex items-center space-x-2">
-            <Activity className="text-cyan-500" size={20} />
-            <h2 className="text-slate-200 font-bold uppercase tracking-widest text-sm">Multi-Track Editor</h2>
+            <Activity className={isDarkMode ? "text-cyan-500" : "text-teal-600"} size={20} />
+            <h2 className={`font-bold uppercase tracking-widest text-sm ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}`}>Multi-Track Editor</h2>
         </div>
       </header>
 
@@ -302,16 +300,22 @@ export const CenterStage: React.FC<CenterStageProps> = ({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className={`flex-1 flex flex-col items-center justify-center p-8 transition-colors ${isDragging ? 'bg-cyan-900/20' : ''}`}
+              className={`flex-1 flex flex-col items-center justify-center p-8 transition-colors ${isDragging ? (isDarkMode ? 'bg-cyan-900/20' : 'bg-teal-50') : ''}`}
               onDragOver={handleDragOver}
               onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
             >
               <input type="file" ref={fileInputRef} className="hidden" accept="audio/*,.wav,.mp3" onChange={handleFileInput} />
-              <div className="p-6 border-2 border-dashed border-slate-700 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-cyan-500 hover:bg-slate-900 transition-all group">
-                  <div className="p-4 rounded-full bg-slate-800 text-cyan-400 mb-4 group-hover:scale-110 transition-transform"><UploadCloud size={48} /></div>
-                  <h3 className="text-xl font-medium text-slate-200 mb-1">Drop Audio File</h3>
+              <div className={`p-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all group ${
+                  isDarkMode 
+                  ? 'border-slate-700 hover:border-cyan-500 hover:bg-slate-900' 
+                  : 'border-slate-300 hover:border-teal-500 hover:bg-white'
+              }`}>
+                  <div className={`p-4 rounded-full mb-4 group-hover:scale-110 transition-transform ${isDarkMode ? 'bg-slate-800 text-cyan-400' : 'bg-slate-100 text-teal-600'}`}>
+                      <UploadCloud size={48} />
+                  </div>
+                  <h3 className={`text-xl font-medium mb-1 ${isDarkMode ? 'text-slate-200' : 'text-slate-900'}`}>Drop Audio File</h3>
                   <p className="text-slate-500 text-sm">WAV, MP3 (Max 50MB)</p>
               </div>
             </motion.div>
@@ -322,13 +326,16 @@ export const CenterStage: React.FC<CenterStageProps> = ({
               key="editor"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex-1 flex flex-col min-h-0 bg-black/20"
+              className="flex-1 flex flex-col min-h-0 relative"
             >
+               {/* Background for editor area */}
+               <div className={`absolute inset-0 z-0 ${isDarkMode ? 'bg-black/20' : 'bg-slate-100/50'}`} />
+
                {/* File Info Bar */}
-               <div className="flex items-center justify-between px-6 py-2 bg-slate-900/50 border-b border-slate-800">
+               <div className={`relative z-10 flex items-center justify-between px-6 py-2 border-b ${isDarkMode ? 'bg-slate-900/50 border-slate-800' : 'bg-white border-slate-200'}`}>
                   <div className="flex items-center space-x-3">
                       <FileAudio size={16} className="text-slate-500" />
-                      <span className="text-sm font-mono text-slate-300">{currentFile.name}</span>
+                      <span className={`text-sm font-mono ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>{currentFile.name}</span>
                       <span className="text-xs text-slate-600 font-mono">{(currentFile.size / 1024 / 1024).toFixed(2)} MB</span>
                   </div>
                   <button onClick={clearFile} className="p-1 hover:text-red-400 text-slate-500"><X size={16} /></button>
@@ -340,14 +347,15 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                   subtitle="Primary Source"
                   icon={<Activity size={14} />} 
                   height="260px"
+                  isDarkMode={isDarkMode}
                   controls={
                       <div className="flex space-x-2">
                           <button 
                             onClick={() => setActiveAudioSource('raw')}
                             className={`px-2 py-1 text-[10px] flex items-center rounded border transition-colors ${
                                 activeAudioSource === 'raw' 
-                                ? 'bg-cyan-600 text-white border-cyan-500' 
-                                : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                                ? (isDarkMode ? 'bg-cyan-600 text-white border-cyan-500' : 'bg-teal-600 text-white border-teal-500')
+                                : (isDarkMode ? 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200' : 'bg-white text-slate-500 border-slate-300 hover:text-slate-800')
                             }`}
                           >
                              <Headphones size={12} className="mr-1.5" />
@@ -358,8 +366,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                >
                   <WaveformTrack 
                       audioUrl={currentFile.url}
-                      waveColor="#06b6d4"
-                      progressColor="#cffafe"
+                      waveColor={isDarkMode ? "#06b6d4" : "#0d9488"} // Cyan vs Teal
+                      progressColor={isDarkMode ? "#cffafe" : "#5eead4"}
                       onReady={(d) => setDuration(d)}
                       seekTo={seekTarget}
                       onSeek={handleSeek}
@@ -367,6 +375,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       volume={activeAudioSource === 'raw' ? (isMuted ? 0 : volume) : 0}
                       onTimeUpdate={activeAudioSource === 'raw' ? handleTimeUpdate : undefined}
                       zoomLevel={zoomLevel}
+                      isDarkMode={isDarkMode}
                   />
                </TrackRow>
 
@@ -376,6 +385,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                   subtitle="Human & AI Labels"
                   icon={<ListMusic size={14} />} 
                   height="140px"
+                  isDarkMode={isDarkMode}
                >
                   <TimelineTrack 
                       duration={duration}
@@ -387,6 +397,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                       currentLabelFile={currentLabelFile}
                       currentTime={currentTime}
                       zoomLevel={zoomLevel}
+                      isDarkMode={isDarkMode}
                   />
                </TrackRow>
 
@@ -404,7 +415,8 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                             subtitle={aiFilterConfig ? `${aiFilterConfig.type} @ ${aiFilterConfig.frequency}Hz` : 'Processing...'}
                             icon={<Wand2 size={14} />} 
                             height="260px"
-                            className="bg-emerald-950/10"
+                            isDarkMode={isDarkMode}
+                            className={isDarkMode ? "bg-emerald-950/10" : "bg-emerald-50/50"}
                             controls={
                                 <div className="flex space-x-2">
                                     <button 
@@ -414,7 +426,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                                         className={`px-2 py-1 text-[10px] flex items-center rounded border transition-colors ${
                                             activeAudioSource === 'filtered'
                                             ? 'bg-emerald-600 text-white border-emerald-500' 
-                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                                            : (isDarkMode ? 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200' : 'bg-white text-slate-500 border-slate-300 hover:text-slate-800')
                                         }`}
                                     >
                                         <Headphones size={12} className="mr-1.5" />
@@ -440,6 +452,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                                         volume={activeAudioSource === 'filtered' ? (isMuted ? 0 : volume) : 0}
                                         onTimeUpdate={activeAudioSource === 'filtered' ? handleTimeUpdate : undefined}
                                         zoomLevel={zoomLevel}
+                                        isDarkMode={isDarkMode}
                                     />
                                 )
                             )}
@@ -449,7 +462,7 @@ export const CenterStage: React.FC<CenterStageProps> = ({
                </AnimatePresence>
 
                {/* Spacer for scroll */}
-               <div className="flex-1 bg-slate-950 min-h-[50px]"></div>
+               <div className={`flex-1 min-h-[50px] ${isDarkMode ? 'bg-slate-950' : 'bg-slate-50'}`}></div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -469,10 +482,11 @@ export const CenterStage: React.FC<CenterStageProps> = ({
              onToggleMute={() => setIsMuted(!isMuted)}
              onZoomIn={handleZoomIn}
              onZoomOut={handleZoomOut}
+             isDarkMode={isDarkMode}
           />
       )}
       
-      <div className="flex-shrink-0 bg-slate-900 border-t border-slate-800">
+      <div className={`flex-shrink-0 border-t ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
         <DebugLog logs={logs} />
       </div>
     </div>
