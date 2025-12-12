@@ -51,6 +51,11 @@ The app is designed for **zero-setup testing**. You can simply open the AI Studi
 * **Backup Plan:** If you encounter a `429 Resource Exhausted` error (due to shared quota limits), please **Fork** the project and add your own `API_KEY` to the Environment Variables.
 * **Data:** The built-in "Reference Cases" library allows you to test the app instantly with pre-loaded clinical data, no external downloads required.
 
+#### **Future Roadmap**
+* **Edge Deployment:** Porting the filtering logic to **Gemini Nano** for offline, on-device analysis in remote clinics without internet.
+* **Hardware Integration:** Connecting directly to digital stethoscopes (e.g., Littmann Core) via Web Bluetooth API.
+* **Longitudinal Tracking:** Building a patient history timeline to track disease progression over weeks rather than single visits.
+
 ---
 
 ### **Project Links**
