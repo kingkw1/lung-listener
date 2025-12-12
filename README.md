@@ -59,11 +59,24 @@ Includes a cloud-fetched library of "Gold Standard" cases (Pneumonia, COPD, Heal
 
 ---
 
-## 🚀 How to Run (Judge Instructions)
+## 🚀 How to Run
 
-**Prerequisite:** You need a Google Gemini API Key.
+### Option 1: Quick Start (Google AI Studio) - **Recommended**
+The fastest way to test the app is directly in the browser.
 
-1.  **Fork & Clone**
+1.  **Click the Project Link:** [Lung Listener](https://ai.studio/apps/drive/1mwEeTs57pYeME4xJuWNaXOxVR9NWiQpR)
+2.  **Sign In:** Log in with your Google Account to enable the Vibe Coding environment.
+3.  **Run:** Click the "Run" or "Preview" button. The app should function immediately using your account's free tier quota.
+
+> **⚠️ Note:** If you encounter a `429 Resource Exhausted` error, please **Fork** the project and add your own API Key in the "Secrets" tab to bypass the shared rate limit.
+---
+
+### Option 2: Run Locally (Developer Mode)
+If you prefer to run the codebase on your local machine:
+
+**Prerequisites:** Node.js (v18+) and a Google Gemini API Key.
+
+1.  **Clone the Repository**
     ```bash
     git clone [https://github.com/kingkw1/lung-listener.git](https://github.com/kingkw1/lung-listener.git)
     cd lung-listener
@@ -74,15 +87,16 @@ Includes a cloud-fetched library of "Gold Standard" cases (Pneumonia, COPD, Heal
     npm install
     ```
 
-3.  **Configure API Key**
-    * Create a file named `.env.local` in the root directory.
-    * Add your key:
+3.  **Configure Environment & API Key**
+    * Create a `.env.local` file in the root directory.
+    * Add your API key (ensure the variable name matches your code):
         ```env
         VITE_GEMINI_API_KEY=your_actual_api_key_here
         ```
+    * *(Note: You may need to update the code to use import.meta.env.VITE_GEMINI_API_KEY if running with Vite locally)*
     * *(Note: The app requires a valid key to perform Deep Analysis)*
 
-4.  **Run Development Server**
+4.  **Start App**
     ```bash
     npm run dev
     ```
