@@ -4,8 +4,16 @@
   <h3>Vibe Coding a Digital Pulmonologist with Gemini 3 Pro</h3>
 
   <p>
+    <a href="https://aistudio.google.com/apps/drive/1mwEeTs57pYeME4xJuWNaXOxVR9NWiQpR?fullscreenApplet=true&showPreview=true&showAssistant=true">
+      <img src="https://img.shields.io/badge/Try_App-Google_AI_Studio-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Try in AI Studio" />
+    </a>
+    <a href="https://www.youtube.com/watch?v=DeplSlKUGN4">
+      <img src="https://img.shields.io/badge/Watch_Demo-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Video" />
+    </a>
+  </p>
+
+  <p>
     <img src="https://img.shields.io/badge/Built%20with-Gemini%203%20Pro-8E44AD?style=for-the-badge&logo=google-gemini" alt="Built with Gemini" />
-    <img src="https://img.shields.io/badge/Platform-Google%20AI%20Studio-4285F4?style=for-the-badge&logo=google" alt="AI Studio" />
     <img src="https://img.shields.io/badge/License-Apache%202.0-green?style=for-the-badge" alt="License" />
   </p>
 </div>
