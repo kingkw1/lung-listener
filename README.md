@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/Project Logo.png" alt="The Lung Listener Logo" width="120" />
+  <img src="./assets/logo.png" alt="The Lung Listener Logo" width="480" />
   <h1>The Lung Listener</h1>
   <h3>Vibe Coding a Digital Pulmonologist with Gemini 3 Pro</h3>
 
@@ -31,6 +31,11 @@ Respiratory disease is the 3rd leading cause of death worldwide, yet diagnosis o
 ---
 
 ## 🔬 Key Features
+
+<div align="center">
+  <img src="./assets/dashboard.png" alt="The Dashboard" width="720" />
+</div>
+
 
 ### 1. Native Audio Analysis (No Transcription)
 Unlike traditional wrappers that convert audio to text, The Lung Listener pipes the **Raw Audio Buffer** directly into `gemini-3-pro-preview`. This allows the model to detect non-speech textures like the "musicality" of a wheeze or the "percussive" nature of a crackle.
