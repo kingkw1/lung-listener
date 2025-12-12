@@ -56,9 +56,9 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
   const wheezeRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('wheeze'));
   const crackleRegions = clinicalRegions.filter(r => r.content.toLowerCase().includes('crackle'));
   
-  // Show Drop Zone overlay ONLY if no human labels AND no AI labels are present.
-  // This allows AI labels to "unlock" the view even if human labels aren't uploaded yet.
-  const showDropZone = clinicalRegions.length === 0 && aiRegions.length === 0;
+  // Show Drop Zone overlay ONLY if no human labels file is loaded AND no AI labels are present.
+  // Checking !currentLabelFile instead of clinicalRegions.length allows empty "Healthy" files to display the track.
+  const showDropZone = !currentLabelFile && aiRegions.length === 0;
 
   // --- NEW ROBUST SCROLLING LOGIC ---
   const currentPixel = currentTime * PIXELS_PER_SECOND;
@@ -229,7 +229,7 @@ export const TimelineTrack: React.FC<TimelineTrackProps> = ({
                     <LabelControlZone 
                         onRegionsLoaded={onRegionsLoaded}
                         onClear={onClear}
-                        hasLabels={clinicalRegions.length > 0}
+                        hasLabels={!!currentLabelFile}
                         currentLabelFile={currentLabelFile}
                     />
                 </div>
